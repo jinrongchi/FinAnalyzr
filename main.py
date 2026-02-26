@@ -19,7 +19,7 @@ class ChineseStockAnalyzer:
         """
         try:
             print(f"Fetching financial data for {self.stock_code}...")
-            df = ak.stock_financial_abstract_em(symbol=self.stock_code)
+            df = ak.stock_financial_abstract(symbol=self.stock_code)
 
             if df.empty:
                 raise ValueError(f"No financial data found for code {self.stock_code}.")

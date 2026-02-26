@@ -1,7 +1,6 @@
 """
 Chinese CAS (China A-Share) Quarterly Report Analyzer
 Analyzes financial reports to generate Buy/Sell/Hold recommendations
-Python 3.12
 """
 
 import json
@@ -10,17 +9,17 @@ from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
 
-
 # ─────────────────────────────────────────────────────────────
 # Data Structures
 # ─────────────────────────────────────────────────────────────
 
+
 class Recommendation(Enum):
-    STRONG_BUY  = "STRONG BUY"
-    BUY         = "BUY"
-    HOLD        = "HOLD"
-    SELL        = "SELL"
-    STRONG_SELL = "STRONG SELL"
+    STRONG_BUY = "STRONG BUY ★★"
+    BUY = "BUY ★"
+    HOLD = "HOLD ◆"
+    SELL = "SELL ▼"
+    STRONG_SELL = "STRONG SELL ▼▼"
 
 
 @dataclass
@@ -30,38 +29,38 @@ class FinancialData:
     # Identity
     company_name: str = ""
     stock_code: str = ""
-    report_period: str = ""          # e.g. "2024-Q3"
+    report_period: str = ""  # e.g. "2024-Q3"
 
     # Income Statement
-    revenue: Optional[float] = None          # 营业收入 (¥)
-    revenue_prev: Optional[float] = None     # Same period previous year
-    net_profit: Optional[float] = None       # 归母净利润
+    revenue: Optional[float] = None  # 营业收入 (¥)
+    revenue_prev: Optional[float] = None  # Same period previous year
+    net_profit: Optional[float] = None  # 归母净利润
     net_profit_prev: Optional[float] = None
-    operating_profit: Optional[float] = None # 营业利润
+    operating_profit: Optional[float] = None  # 营业利润
     gross_profit_margin: Optional[float] = None  # 毛利率 (%)
 
     # Balance Sheet
-    total_assets: Optional[float] = None     # 总资产
-    total_equity: Optional[float] = None     # 股东权益
+    total_assets: Optional[float] = None  # 总资产
+    total_equity: Optional[float] = None  # 股东权益
     total_liabilities: Optional[float] = None
-    cash: Optional[float] = None             # 货币资金
+    cash: Optional[float] = None  # 货币资金
 
     # Cash Flow
-    operating_cash_flow: Optional[float] = None   # 经营活动现金流量净额
-    free_cash_flow: Optional[float] = None         # 自由现金流
+    operating_cash_flow: Optional[float] = None  # 经营活动现金流量净额
+    free_cash_flow: Optional[float] = None  # 自由现金流
 
     # Per-Share Data
-    eps: Optional[float] = None              # 每股收益
+    eps: Optional[float] = None  # 每股收益
     eps_prev: Optional[float] = None
-    bvps: Optional[float] = None             # 每股净资产
+    bvps: Optional[float] = None  # 每股净资产
     current_price: Optional[float] = None
 
     # Derived / Additional
-    pe_ratio: Optional[float] = None         # 市盈率
-    pb_ratio: Optional[float] = None         # 市净率
-    roe: Optional[float] = None              # 净资产收益率 (%)
-    debt_to_equity: Optional[float] = None   # 资产负债率 (%)
-    current_ratio: Optional[float] = None    # 流动比率
+    pe_ratio: Optional[float] = None  # 市盈率
+    pb_ratio: Optional[float] = None  # 市净率
+    roe: Optional[float] = None  # 净资产收益率 (%)
+    debt_to_equity: Optional[float] = None  # 资产负债率 (%)
+    current_ratio: Optional[float] = None  # 流动比率
     inventory_turnover: Optional[float] = None
 
 
@@ -78,6 +77,7 @@ class AnalysisResult:
 # ─────────────────────────────────────────────────────────────
 # Scoring Engine
 # ─────────────────────────────────────────────────────────────
+
 
 class CASAnalyzer:
     """
@@ -99,11 +99,11 @@ class CASAnalyzer:
     def analyze(self, fd: FinancialData) -> AnalysisResult:
         result = AnalysisResult(financial_data=fd)
 
-        result.scores["revenue_growth"]  = self._score_revenue_growth(fd, result)
-        result.scores["profitability"]   = self._score_profitability(fd, result)
-        result.scores["valuation"]       = self._score_valuation(fd, result)
-        result.scores["financial_health"]= self._score_financial_health(fd, result)
-        result.scores["cash_flow"]       = self._score_cash_flow(fd, result)
+        result.scores["revenue_growth"] = self._score_revenue_growth(fd, result)
+        result.scores["profitability"] = self._score_profitability(fd, result)
+        result.scores["valuation"] = self._score_valuation(fd, result)
+        result.scores["financial_health"] = self._score_financial_health(fd, result)
+        result.scores["cash_flow"] = self._score_cash_flow(fd, result)
 
         result.total_score = sum(result.scores.values())
         result.recommendation = self._map_recommendation(result.total_score)
@@ -115,12 +115,24 @@ class CASAnalyzer:
         score = 0.0
         if fd.revenue and fd.revenue_prev and fd.revenue_prev != 0:
             growth = (fd.revenue - fd.revenue_prev) / abs(fd.revenue_prev) * 100
-            if   growth > 30:  score += 10;  r.reasons.append(f"Revenue growth outstanding: +{growth:.1f}% YoY")
-            elif growth > 15:  score += 7;   r.reasons.append(f"Revenue growth strong: +{growth:.1f}% YoY")
-            elif growth > 5:   score += 4;   r.reasons.append(f"Revenue growth moderate: +{growth:.1f}% YoY")
-            elif growth > 0:   score += 1;   r.reasons.append(f"Revenue growth slow: +{growth:.1f}% YoY")
-            elif growth > -10: score -= 3;   r.warnings.append(f"Revenue declining slightly: {growth:.1f}% YoY")
-            else:              score -= 7;   r.warnings.append(f"Revenue declining sharply: {growth:.1f}% YoY")
+            if growth > 30:
+                score += 10
+                r.reasons.append(f"Revenue growth outstanding: +{growth:.1f}% YoY")
+            elif growth > 15:
+                score += 7
+                r.reasons.append(f"Revenue growth strong: +{growth:.1f}% YoY")
+            elif growth > 5:
+                score += 4
+                r.reasons.append(f"Revenue growth moderate: +{growth:.1f}% YoY")
+            elif growth > 0:
+                score += 1
+                r.reasons.append(f"Revenue growth slow: +{growth:.1f}% YoY")
+            elif growth > -10:
+                score -= 3
+                r.warnings.append(f"Revenue declining slightly: {growth:.1f}% YoY")
+            else:
+                score -= 7
+                r.warnings.append(f"Revenue declining sharply: {growth:.1f}% YoY")
         else:
             r.warnings.append("Revenue YoY comparison unavailable")
         return score
@@ -131,25 +143,47 @@ class CASAnalyzer:
         # Gross profit margin (毛利率)
         if fd.gross_profit_margin is not None:
             gpm = fd.gross_profit_margin
-            if   gpm > 40: score += 4;  r.reasons.append(f"High gross margin: {gpm:.1f}%")
-            elif gpm > 25: score += 2;  r.reasons.append(f"Decent gross margin: {gpm:.1f}%")
-            elif gpm > 10: score += 0
-            else:          score -= 3;  r.warnings.append(f"Low gross margin: {gpm:.1f}%")
+            if gpm > 40:
+                score += 4
+                r.reasons.append(f"High gross margin: {gpm:.1f}%")
+            elif gpm > 25:
+                score += 2
+                r.reasons.append(f"Decent gross margin: {gpm:.1f}%")
+            elif gpm > 10:
+                score += 0
+            else:
+                score -= 3
+                r.warnings.append(f"Low gross margin: {gpm:.1f}%")
 
         # Net profit growth
         if fd.net_profit and fd.net_profit_prev and fd.net_profit_prev != 0:
             npg = (fd.net_profit - fd.net_profit_prev) / abs(fd.net_profit_prev) * 100
-            if   npg > 30:  score += 6;  r.reasons.append(f"Net profit growth strong: +{npg:.1f}%")
-            elif npg > 10:  score += 3;  r.reasons.append(f"Net profit growth moderate: +{npg:.1f}%")
-            elif npg > 0:   score += 1
-            elif npg > -20: score -= 2;  r.warnings.append(f"Net profit declining: {npg:.1f}%")
-            else:           score -= 6;  r.warnings.append(f"Net profit sharply declining: {npg:.1f}%")
+            if npg > 30:
+                score += 6
+                r.reasons.append(f"Net profit growth strong: +{npg:.1f}%")
+            elif npg > 10:
+                score += 3
+                r.reasons.append(f"Net profit growth moderate: +{npg:.1f}%")
+            elif npg > 0:
+                score += 1
+            elif npg > -20:
+                score -= 2
+                r.warnings.append(f"Net profit declining: {npg:.1f}%")
+            else:
+                score -= 6
+                r.warnings.append(f"Net profit sharply declining: {npg:.1f}%")
 
         # ROE (净资产收益率)
         if fd.roe is not None:
-            if   fd.roe > 20: score += 3; r.reasons.append(f"Excellent ROE: {fd.roe:.1f}%")
-            elif fd.roe > 10: score += 1; r.reasons.append(f"Adequate ROE: {fd.roe:.1f}%")
-            elif fd.roe < 0:  score -= 4; r.warnings.append(f"Negative ROE: {fd.roe:.1f}%")
+            if fd.roe > 20:
+                score += 3
+                r.reasons.append(f"Excellent ROE: {fd.roe:.1f}%")
+            elif fd.roe > 10:
+                score += 1
+                r.reasons.append(f"Adequate ROE: {fd.roe:.1f}%")
+            elif fd.roe < 0:
+                score -= 4
+                r.warnings.append(f"Negative ROE: {fd.roe:.1f}%")
 
         # Net profit itself (negative is a red flag)
         if fd.net_profit is not None and fd.net_profit < 0:
@@ -167,12 +201,23 @@ class CASAnalyzer:
             pe = fd.current_price / fd.eps
 
         if pe is not None:
-            if   pe < 0:   score -= 5; r.warnings.append(f"Negative P/E (loss-making): {pe:.1f}x")
-            elif pe < 10:  score += 5; r.reasons.append(f"Undervalued P/E: {pe:.1f}x")
-            elif pe < 20:  score += 3; r.reasons.append(f"Reasonable P/E: {pe:.1f}x")
-            elif pe < 35:  score += 0
-            elif pe < 60:  score -= 3; r.warnings.append(f"High P/E, growth premium needed: {pe:.1f}x")
-            else:          score -= 6; r.warnings.append(f"Very high P/E risk: {pe:.1f}x")
+            if pe < 0:
+                score -= 5
+                r.warnings.append(f"Negative P/E (loss-making): {pe:.1f}x")
+            elif pe < 10:
+                score += 5
+                r.reasons.append(f"Undervalued P/E: {pe:.1f}x")
+            elif pe < 20:
+                score += 3
+                r.reasons.append(f"Reasonable P/E: {pe:.1f}x")
+            elif pe < 35:
+                score += 0
+            elif pe < 60:
+                score -= 3
+                r.warnings.append(f"High P/E, growth premium needed: {pe:.1f}x")
+            else:
+                score -= 6
+                r.warnings.append(f"Very high P/E risk: {pe:.1f}x")
 
         # P/B ratio
         pb = fd.pb_ratio
@@ -180,11 +225,20 @@ class CASAnalyzer:
             pb = fd.current_price / fd.bvps
 
         if pb is not None:
-            if   pb < 1:   score += 4; r.reasons.append(f"Trading below book value (P/B {pb:.2f}x)")
-            elif pb < 2:   score += 2; r.reasons.append(f"Fair P/B ratio: {pb:.2f}x")
-            elif pb < 4:   score += 0
-            elif pb < 8:   score -= 2; r.warnings.append(f"High P/B: {pb:.2f}x")
-            else:          score -= 4; r.warnings.append(f"Very high P/B: {pb:.2f}x")
+            if pb < 1:
+                score += 4
+                r.reasons.append(f"Trading below book value (P/B {pb:.2f}x)")
+            elif pb < 2:
+                score += 2
+                r.reasons.append(f"Fair P/B ratio: {pb:.2f}x")
+            elif pb < 4:
+                score += 0
+            elif pb < 8:
+                score -= 2
+                r.warnings.append(f"High P/B: {pb:.2f}x")
+            else:
+                score -= 4
+                r.warnings.append(f"Very high P/B: {pb:.2f}x")
 
         return max(-10, min(10, score))
 
@@ -193,28 +247,53 @@ class CASAnalyzer:
 
         # Debt-to-equity / leverage (资产负债率)
         dte = fd.debt_to_equity
-        if dte is None and fd.total_liabilities and fd.total_assets and fd.total_assets != 0:
+        if (
+            dte is None
+            and fd.total_liabilities
+            and fd.total_assets
+            and fd.total_assets != 0
+        ):
             dte = fd.total_liabilities / fd.total_assets * 100
 
         if dte is not None:
-            if   dte < 30: score += 4; r.reasons.append(f"Low leverage: {dte:.1f}% debt ratio")
-            elif dte < 50: score += 2
-            elif dte < 70: score -= 1
-            elif dte < 85: score -= 4; r.warnings.append(f"High leverage: {dte:.1f}% debt ratio")
-            else:          score -= 7; r.warnings.append(f"Extremely high leverage: {dte:.1f}%")
+            if dte < 30:
+                score += 4
+                r.reasons.append(f"Low leverage: {dte:.1f}% debt ratio")
+            elif dte < 50:
+                score += 2
+            elif dte < 70:
+                score -= 1
+            elif dte < 85:
+                score -= 4
+                r.warnings.append(f"High leverage: {dte:.1f}% debt ratio")
+            else:
+                score -= 7
+                r.warnings.append(f"Extremely high leverage: {dte:.1f}%")
 
         # Current ratio (流动比率)
         if fd.current_ratio is not None:
-            if   fd.current_ratio > 2:   score += 3; r.reasons.append(f"Strong liquidity (CR {fd.current_ratio:.2f})")
-            elif fd.current_ratio > 1.5: score += 1
-            elif fd.current_ratio > 1:   score += 0
-            else:                        score -= 4; r.warnings.append(f"Poor liquidity (CR {fd.current_ratio:.2f})")
+            if fd.current_ratio > 2:
+                score += 3
+                r.reasons.append(f"Strong liquidity (CR {fd.current_ratio:.2f})")
+            elif fd.current_ratio > 1.5:
+                score += 1
+            elif fd.current_ratio > 1:
+                score += 0
+            else:
+                score -= 4
+                r.warnings.append(f"Poor liquidity (CR {fd.current_ratio:.2f})")
 
         # Cash buffer
         if fd.cash and fd.total_assets:
             cash_ratio = fd.cash / fd.total_assets
-            if cash_ratio > 0.2: score += 2; r.reasons.append(f"Strong cash position: {cash_ratio*100:.1f}% of assets")
-            elif cash_ratio < 0.05: score -= 1; r.warnings.append("Low cash reserves")
+            if cash_ratio > 0.2:
+                score += 2
+                r.reasons.append(
+                    f"Strong cash position: {cash_ratio*100:.1f}% of assets"
+                )
+            elif cash_ratio < 0.05:
+                score -= 1
+                r.warnings.append("Low cash reserves")
 
         return max(-10, min(10, score))
 
@@ -224,22 +303,35 @@ class CASAnalyzer:
         if fd.operating_cash_flow is not None:
             if fd.operating_cash_flow > 0:
                 score += 3
-                r.reasons.append(f"Positive operating cash flow: ¥{fd.operating_cash_flow/1e8:.2f}B")
+                r.reasons.append(
+                    f"Positive operating cash flow: ¥{fd.operating_cash_flow/1e8:.2f}B"
+                )
                 # OCF vs Net profit quality check
                 if fd.net_profit and fd.net_profit > 0:
                     ratio = fd.operating_cash_flow / fd.net_profit
-                    if ratio > 1.2:  score += 3; r.reasons.append(f"High earnings quality (OCF/NP {ratio:.2f}x)")
-                    elif ratio > 0.8: score += 1
-                    elif ratio < 0.3: score -= 2; r.warnings.append(f"Low earnings quality (OCF/NP {ratio:.2f}x)")
+                    if ratio > 1.2:
+                        score += 3
+                        r.reasons.append(f"High earnings quality (OCF/NP {ratio:.2f}x)")
+                    elif ratio > 0.8:
+                        score += 1
+                    elif ratio < 0.3:
+                        score -= 2
+                        r.warnings.append(f"Low earnings quality (OCF/NP {ratio:.2f}x)")
             else:
                 score -= 5
-                r.warnings.append(f"Negative operating cash flow: ¥{fd.operating_cash_flow/1e8:.2f}B")
+                r.warnings.append(
+                    f"Negative operating cash flow: ¥{fd.operating_cash_flow/1e8:.2f}B"
+                )
 
         if fd.free_cash_flow is not None:
             if fd.free_cash_flow > 0:
-                score += 2; r.reasons.append(f"Positive free cash flow: ¥{fd.free_cash_flow/1e8:.2f}B")
+                score += 2
+                r.reasons.append(
+                    f"Positive free cash flow: ¥{fd.free_cash_flow/1e8:.2f}B"
+                )
             else:
-                score -= 1; r.warnings.append("Negative free cash flow")
+                score -= 1
+                r.warnings.append("Negative free cash flow")
 
         return max(-10, min(10, score))
 
@@ -247,16 +339,22 @@ class CASAnalyzer:
 
     @staticmethod
     def _map_recommendation(score: float) -> Recommendation:
-        if   score > 20:  return Recommendation.STRONG_BUY
-        elif score > 8:   return Recommendation.BUY
-        elif score > -8:  return Recommendation.HOLD
-        elif score > -20: return Recommendation.SELL
-        else:             return Recommendation.STRONG_SELL
+        if score > 20:
+            return Recommendation.STRONG_BUY
+        elif score > 8:
+            return Recommendation.BUY
+        elif score > -8:
+            return Recommendation.HOLD
+        elif score > -20:
+            return Recommendation.SELL
+        else:
+            return Recommendation.STRONG_SELL
 
 
 # ─────────────────────────────────────────────────────────────
 # Report Printer
 # ─────────────────────────────────────────────────────────────
+
 
 def print_report(result: AnalysisResult) -> None:
     fd = result.financial_data
@@ -265,21 +363,21 @@ def print_report(result: AnalysisResult) -> None:
 
     # Color codes for terminal
     colors = {
-        Recommendation.STRONG_BUY:  "\033[92m",  # bright green
-        Recommendation.BUY:         "\033[32m",   # green
-        Recommendation.HOLD:        "\033[33m",   # yellow
-        Recommendation.SELL:        "\033[31m",   # red
-        Recommendation.STRONG_SELL: "\033[91m",   # bright red
+        Recommendation.STRONG_BUY: "\033[92m",  # bright green
+        Recommendation.BUY: "\033[32m",  # green
+        Recommendation.HOLD: "\033[33m",  # yellow
+        Recommendation.SELL: "\033[31m",  # red
+        Recommendation.STRONG_SELL: "\033[91m",  # bright red
     }
     RESET = "\033[0m"
     color = colors.get(rec, "")
 
-    print("\n" + "═"*60)
+    print("\n" + "═" * 60)
     print(f"  CAS Analysis Report")
-    print("═"*60)
+    print("═" * 60)
     print(f"  Company  : {fd.company_name or 'N/A'}  ({fd.stock_code or 'N/A'})")
     print(f"  Period   : {fd.report_period or 'N/A'}")
-    print("─"*60)
+    print("─" * 60)
 
     # Category scores
     print("\n  Category Scores (max ±10 each):")
@@ -299,12 +397,13 @@ def print_report(result: AnalysisResult) -> None:
     for w in result.warnings or ["None identified"]:
         print(f"     • {w}")
 
-    print("═"*60 + "\n")
+    print("═" * 60 + "\n")
 
 
 # ─────────────────────────────────────────────────────────────
 # JSON / Dict Loader
 # ─────────────────────────────────────────────────────────────
+
 
 def load_from_dict(data: dict) -> FinancialData:
     """
@@ -327,6 +426,7 @@ def load_from_json_file(path: str) -> FinancialData:
 # (Optional) Basic Text Parser for Chinese Report Snippets
 # ─────────────────────────────────────────────────────────────
 
+
 def parse_chinese_text(text: str) -> FinancialData:
     """
     Attempts a naive regex extraction of key numbers from a Chinese
@@ -336,10 +436,10 @@ def parse_chinese_text(text: str) -> FinancialData:
     fd = FinancialData()
 
     patterns = {
-        "revenue":      r"营业(?:总)?收入[：:]*\s*([\d,\.]+)\s*(?:万元|亿元)?",
-        "net_profit":   r"归(?:属于母公司)?股东的净利润[：:]*\s*([\d,\.]+)\s*(?:万元|亿元)?",
-        "eps":          r"基本每股收益[：:]*\s*([\d,\.]+)\s*元",
-        "roe":          r"净资产收益率[：:]*\s*([\d,\.]+)\s*%",
+        "revenue": r"营业(?:总)?收入[：:]*\s*([\d,\.]+)\s*(?:万元|亿元)?",
+        "net_profit": r"归(?:属于母公司)?股东的净利润[：:]*\s*([\d,\.]+)\s*(?:万元|亿元)?",
+        "eps": r"基本每股收益[：:]*\s*([\d,\.]+)\s*元",
+        "roe": r"净资产收益率[：:]*\s*([\d,\.]+)\s*%",
         "gross_profit_margin": r"毛利率[：:]*\s*([\d,\.]+)\s*%",
         "current_ratio": r"流动比率[：:]*\s*([\d,\.]+)",
         "debt_to_equity": r"资产负债率[：:]*\s*([\d,\.]+)\s*%",
@@ -363,6 +463,7 @@ def parse_chinese_text(text: str) -> FinancialData:
 # Demo / Example Usage
 # ─────────────────────────────────────────────────────────────
 
+
 def demo():
     """
     Three demo companies to show BUY, HOLD, and SELL outcomes.
@@ -373,62 +474,67 @@ def demo():
 
     # ── Example 1: Strong performer (expected BUY) ─────────────
     data_good = FinancialData(
-        company_name="宁德时代 (CATL)",
-        stock_code="300750",
-        report_period="2024-Q3",
-        revenue=120_000_000_000,
-        revenue_prev=95_000_000_000,
-        net_profit=11_000_000_000,
-        net_profit_prev=8_500_000_000,
-        gross_profit_margin=26.5,
-        roe=18.0,
-        operating_cash_flow=14_000_000_000,
-        free_cash_flow=8_000_000_000,
-        total_assets=300_000_000_000,
-        total_liabilities=130_000_000_000,
-        cash=60_000_000_000,
-        current_ratio=1.8,
-        eps=4.52,
-        eps_prev=3.50,
-        current_price=180.0,
+        company_name="科达利",
+        stock_code="002850",
+        report_period="2025-Q3",
+        revenue=10_603_222_514.38,
+        revenue_prev=8_592_174_316.04,
+        net_profit=1_184_684_326.43,
+        net_profit_prev=1_016_419_682.75,
+        gross_profit_margin=23.16,
+        roe=9.48,
+        operating_cash_flow=1_928_6482.75,
+        free_cash_flow=573_317_381.26,
+        total_assets=21_483_757_923.99,
+        total_liabilities=8_785_801_619.90,
+        cash=2_437_856_486.38,
+        current_ratio=1.94,
+        eps=4.34,
+        eps_prev=3.76,
+        current_price=167.15,
     )
 
     # ── Example 2: Mediocre performer (expected HOLD) ──────────
     data_mid = FinancialData(
-        company_name="某中型制造企业",
-        stock_code="601001",
-        report_period="2024-Q3",
-        revenue=5_000_000_000,
-        revenue_prev=4_800_000_000,
-        net_profit=300_000_000,
-        net_profit_prev=310_000_000,
-        gross_profit_margin=14.0,
-        roe=9.5,
-        operating_cash_flow=280_000_000,
-        total_assets=10_000_000_000,
-        total_liabilities=5_500_000_000,
-        current_ratio=1.2,
-        eps=0.62,
-        current_price=12.0,
+        company_name="中际联合",
+        stock_code="605305",
+        report_period="2025-Q3",
+        revenue=1_352_090_659.24,
+        revenue_prev=934_170_000,
+        net_profit=438_444_425.50,
+        net_profit_prev=238_200_000,
+        gross_profit_margin=50.60,
+        roe=15.91,
+        operating_cash_flow=183_654_142.11,
+        free_cash_flow=86_585_252.11,
+        total_assets=3_674_396_254.40,
+        total_liabilities=822_795_938.47,
+        current_ratio=4.14,
+        eps=2.06,
+        eps_prev=1.12,
+        current_price=41.08,
     )
 
     # ── Example 3: Distressed company (expected SELL) ──────────
     data_bad = FinancialData(
-        company_name="某问题地产企业",
-        stock_code="000001",
-        report_period="2024-Q3",
-        revenue=2_000_000_000,
-        revenue_prev=4_000_000_000,
-        net_profit=-500_000_000,
-        net_profit_prev=200_000_000,
-        gross_profit_margin=3.0,
-        roe=-8.0,
-        operating_cash_flow=-800_000_000,
-        total_assets=20_000_000_000,
-        total_liabilities=18_500_000_000,
-        current_ratio=0.6,
-        pe_ratio=-10.0,
-        pb_ratio=0.4,
+        company_name="药明康德",
+        stock_code="603259",
+        report_period="2025-Q3",
+        revenue=32_957_000_000,
+        revenue_prev=27_700_000_000,
+        net_profit=12_076_000_000,
+        net_profit_prev=6_532_000_000,
+        gross_profit_margin=41.50,
+        roe=19.80,
+        operating_cash_flow=10_200_000_000,
+        free_cash_flow=7_500_000_000,
+        total_assets=75_000_000_000,
+        total_liabilities=28_000_000_000,
+        current_ratio=2.10,
+        cash=13_000_000_000,
+        eps=4.15,
+        eps_prev=2.24,
+        current_price=41.08,
     )
 
     for data in [data_good, data_mid, data_bad]:
