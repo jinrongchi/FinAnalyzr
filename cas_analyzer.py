@@ -6,8 +6,8 @@ Analyzes financial reports to generate Buy/Sell/Hold recommendations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 # ─────────────────────────────────────────────────────────────
 # Data Structures
