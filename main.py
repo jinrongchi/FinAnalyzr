@@ -5,23 +5,10 @@ from pathlib import Path
 import file_processor.csv_handler as csv_handler
 from file_processor.file_handler import parse_json, parse_txt
 
-COMMON_FILE_EXTENSIONS = {
-    ".json",
-    ".txt",
-    ".pdf",
-    ".docx",
-    ".doc",
-    ".xlsx",
-    ".xls",
-    ".html",
-    ".htm",
-    ".xml",
-}
 
-
-def main():
+def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Chinese Stock Report Analyzer, Buy/Sell Advicer",
+        description="Chinese Stock Report Analyzer, Buy/Sell Adviser",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -46,33 +33,66 @@ def main():
         nargs="?",
         help="The output file name, e.g., cas_report.csv",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def _process_file(file_path: Path) -> list:
+    if not file_path.exists():
+        print(f"\n  ❌ File Error: The file '{file_path}' does not exist.\n")
+        sys.exit(1)
+    file_type = file_path.suffix.lower()
+    if file_type == ".json":
+        return parse_json(file_path)
+    elif file_type == ".txt":
+        return parse_txt(file_path)
+    else:
+        print(
+            f"\n  ❌ FileType Error: Only JSON or TXT format file is supported, but got '{file_type.upper()}'\n"
+        )
+        sys.exit(1)
+
+
+def _process_codes(args) -> list:
+    results = []
+    # Placeholder for incomplete code
+    # fetcher = AkShareFetcher()
+    # for code in args.code:
+    #     try:
+    #         fd = fetcher.fetch(code)
+    #         res = analyzer.analyze(fd)
+    #         print_report(res)
+    #         results.append(res)
+    #     except Exception as e:
+    #         print(f"\n  ❌ Error processing {code}: {e}")
+    return results
+
+
+def _handle_export(args, results):
+    if not results:
+        return
+    if args.output is None:
+        output = "cas_analyzer.csv"
+    else:
+        output = args.output
+        if not output.lower().endswith(".csv"):
+            stem = Path(output).stem
+            print(
+                f"\n  ⚠️  Warning: The output file must have a .csv extension. Saving as '{stem}.csv'.\n"
+            )
+            output = f"{stem}.csv"
+    print(f"Exporting to {output}")
+    # csv_handler.export_csv(output, results)
+
+
+def main():
+    args = _parse_arguments()
+    results = []
 
     if args.file:
         file_path = Path(args.file)
-        if not file_path.exists():
-            print(f"\n  ❌ File Error: The file '{file_path}' does not exist.\n")
-            sys.exit(1)
-        file_type = file_path.suffix.lower()
-        if file_type == ".json":
-            results = parse_json(file_path)
-        elif file_type == ".txt":
-            results = parse_txt(file_path)
-        else:
-            print(
-                f"\n  ❌ FileType Error: Only JSON or TXT format file is supported, but got '{file_type.upper()}'\n"
-            )
-            sys.exit(1)
+        results = _process_file(file_path)
     elif args.code:
-        fetcher = AkShareFetcher()
-        for code in args.code:
-            try:
-                fd = fetcher.fetch(code)
-                res = analyzer.analyze(fd)
-                print_report(res)
-                results.append(res)
-            except Exception as e:
-                print(f"\n  ❌ Error processing {code}: {e}")
+        results = _process_codes(args.code)
     else:
         print(
             "\n  Use --code to specify the stock codes to analyze, e.g., --code 300750 002594 600519"
@@ -81,30 +101,9 @@ def main():
             "  Or use -f to provide a file with financial data (JSON or TXT format), e.g., -f data.json or -f stocks.txt\n"
         )
         sys.exit(1)
-
-    results = "placeholder"
-    if (args.export or args.output) and results:
-        # Check whether the output filename is specified
-        if args.output is None:
-            # Use the default value if it is not provided
-            output = Path("cas_analyzer.csv")
-        else:
-            # Check if the filename has a correct .csv extension
-            output = Path(args.output)
-            file_extension = output.suffix.lower()
-            if not args.output.lower().endswith(".csv"):
-                if file_extension in COMMON_FILE_EXTENSIONS:
-                    print(
-                        f"\n  Warning: The output file must have a .csv extension, but got '{file_extension}'\n"
-                    )
-                    print(f"  The file will be saved as '{output.stem}.csv'.\n")
-                else:
-                    print(
-                        f"\n  Warning: The output file '{args.output}' does not have a common file extension. The file '{output.stem}.csv' will be generated to save the report.\n"
-                    )
-                output = output.stem + ".csv"
-        print(output)
-        # csv_handler.export_csv(output, results)
+    print(results)
+    if args.export or args.output:
+        _handle_export(args, results)
 
 
 if __name__ == "__main__":
