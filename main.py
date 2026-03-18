@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import file_processor.csv_handler as csv_handler
+from fetcher.akshare_fetcher import AkShareFetcher
 from file_processor.file_handler import parse_json, parse_txt
 
 
@@ -52,18 +53,18 @@ def _process_file(file_path: Path) -> list:
         sys.exit(1)
 
 
-def _process_codes(args) -> list:
+def _process_codes(codes: list) -> list:
     results = []
-    # Placeholder for incomplete code
-    # fetcher = AkShareFetcher()
-    # for code in args.code:
-    #     try:
-    #         fd = fetcher.fetch(code)
-    #         res = analyzer.analyze(fd)
-    #         print_report(res)
-    #         results.append(res)
-    #     except Exception as e:
-    #         print(f"\n  ❌ Error processing {code}: {e}")
+
+    fetcher = AkShareFetcher()
+    for code in codes:
+        try:
+            fd = fetcher.fetch(code)
+            # res = analyzer.analyze(fd)
+            # print_report(res)
+            results.append(fd)
+        except Exception as e:
+            print(f"\n  ❌ Error processing {code}: {e}")
     return results
 
 
@@ -95,7 +96,7 @@ def main():
         results = _process_codes(args.code)
     else:
         print(
-            "\n  Use --code to specify the stock codes to analyze, e.g., --code 300750 002594 600519"
+            "\n  ArgsError\n  Use --code to specify the stock codes to analyze, e.g., --code SH601127 SZ002850 SH600031"
         )
         print(
             "  Or use -f to provide a file with financial data (JSON or TXT format), e.g., -f data.json or -f stocks.txt\n"

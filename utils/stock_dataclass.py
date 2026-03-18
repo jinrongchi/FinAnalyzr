@@ -8,6 +8,7 @@ class FinancialData:
     company_name: str = ""
     stock_code: str = ""
     report_period: str = ""
+    industry: Optional[str] = None
 
     # Income Statement
     revenue: Optional[float] = None
@@ -43,7 +44,7 @@ class FinancialData:
     dividend_yield: Optional[float] = None
 
     # Market
-    market_cap: Optional[float] = None
+    market_value: Optional[float] = None
     total_shares: Optional[float] = None
 
     # Data source tracking

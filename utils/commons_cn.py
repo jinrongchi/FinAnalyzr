@@ -1,0 +1,5 @@
+COMPANY_NAME_CN = "股票简称"
+CURRENT_PRICE_CN = "最新"
+TOTAL_SHARES_CN = "总股本"
+MARKET_VALUE_CN = "总市值"
+INDUSTRY_CN = "行业"

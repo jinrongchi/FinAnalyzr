@@ -3,8 +3,8 @@ import re
 from pathlib import Path
 from typing import List
 
+from utils.commons import COMPANY_NAME, INDUSTRY, REPORT_PERIOD, STOCK_CODE
 from utils.stock_dataclass import FinancialData
-from utils.commons import COMPANY_NAME, STOCK_CODE, REPORT_PERIOD
 
 
 def parse_json(file_path: Path) -> List[FinancialData]:
@@ -36,11 +36,13 @@ def parse_txt(file_path: Path) -> List[FinancialData]:
                 key, value_str = ele.split(": ", 1)
                 key = key.strip()
                 value_str = value_str.strip()
-                if key in {COMPANY_NAME, STOCK_CODE, REPORT_PERIOD}:
+                if key in {COMPANY_NAME, INDUSTRY, REPORT_PERIOD, STOCK_CODE}:
                     data_dict[key] = value_str
                 else:
                     try:
-                        data_dict[key] = float(value_str) if value_str.lower() != "null" else None
+                        data_dict[key] = (
+                            float(value_str) if value_str.lower() != "null" else None
+                        )
                     except ValueError:
                         data_dict[key] = None
             result.append(FinancialData(**data_dict))
