@@ -65,6 +65,10 @@ def _process_codes(codes: list) -> list:
             results.append(fd)
         except Exception as e:
             print(f"\n  ❌ Error processing {code}: {e}")
+
+    ## TODO: Add more fetchers here, e.g., AI-based fetcher / web-clawler fetcher
+    ## The akshare is not stable at all, thinking to retire it with either AI or web-clawler
+
     return results
 
 

@@ -92,7 +92,7 @@ class FinancialData:
     eps: Optional[float] = None
     eps_prev: Optional[float] = None
     bvps: Optional[float] = None
-    current_price: Optional[float] = None
+    current_stock_price: Optional[float] = None
     pe_ratio: Optional[float] = None
     pb_ratio: Optional[float] = None
     roe: Optional[float] = None

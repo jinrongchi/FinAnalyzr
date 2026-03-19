@@ -16,7 +16,7 @@ cash: 2437856486.38
 current_ratio: 1.94
 eps: 4.34
 eps_prev: 3.76
-current_price: 167.15
+current_stock_price: 167.15
 
 company_name: 中际联合
 stock_code: 605305
@@ -35,4 +35,4 @@ total_liabilities: 822795938.47
 current_ratio: 4.14
 eps: 2.06
 eps_prev: 1.12
-current_price: 41.08
+current_stock_price: 41.08
