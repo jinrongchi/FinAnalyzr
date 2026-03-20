@@ -1,7 +1,10 @@
-# Identity
 COMPANY_NAME = "company_name"
 STOCK_CODE = "stock_code"
 REPORT_PERIOD = "report_period"
 INDUSTRY = "industry"
 
 CURRENT_STOCK_PRICE = "current_stock_price"
+PE_RATIO = "pe_ratio"
+PB_RATIO = "pb_ratio"
+DCF_VALUE = "dcf_value"
+FCF_YIELD = "fcf_yield"

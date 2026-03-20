@@ -91,13 +91,13 @@ def _handle_export(args, results):
 
 def main():
     args = _parse_arguments()
-    results = []
+    data = []
 
     if args.file:
         file_path = Path(args.file)
-        results = _process_file(file_path)
+        data = _process_file(file_path)
     elif args.code:
-        results = _process_codes(args.code)
+        data = _process_codes(args.code)
     else:
         print(
             "\n  ArgsError\n  Use --code to specify the stock codes to analyze, e.g., --code SH601127 SZ002850 SH600031"
@@ -106,6 +106,7 @@ def main():
             "  Or use -f to provide a file with financial data (JSON or TXT format), e.g., -f data.json or -f stocks.txt\n"
         )
         sys.exit(1)
+    results = data
     print(results)
     if args.export or args.output:
         _handle_export(args, results)
