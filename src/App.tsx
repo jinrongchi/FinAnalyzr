@@ -49,14 +49,38 @@ function parseTradeDate(sourceTradeDate?: string): Date | null {
   return new Date(y, m - 1, d)
 }
 
-function shouldShowRefreshButton(sourceTradeDate?: string): boolean {
+type RefreshStatus = { canRefresh: boolean; reason: string }
+
+function getRefreshStatus(sourceTradeDate?: string): RefreshStatus {
+  if (!sourceTradeDate) {
+    return { canRefresh: false, reason: '尚未加载数据' }
+  }
   const tradeDate = parseTradeDate(sourceTradeDate)
-  if (!tradeDate) return false
+  if (!tradeDate) {
+    return { canRefresh: false, reason: '尚未加载数据' }
+  }
+
   const now = new Date()
+  const todayDay = now.getDay() // 0=Sun,1=Mon,...,6=Sat
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tradeStart = new Date(tradeDate.getFullYear(), tradeDate.getMonth(), tradeDate.getDate())
   const diffDays = Math.floor((todayStart.getTime() - tradeStart.getTime()) / (24 * 60 * 60 * 1000))
-  return diffDays > 1
+
+  // find most recent Friday relative to today
+  const daysToLastFri = todayDay === 0 ? 2 : todayDay === 6 ? 1 : todayDay === 1 ? 3 : 0
+  if (daysToLastFri > 0) {
+    const lastFri = new Date(todayStart)
+    lastFri.setDate(lastFri.getDate() - daysToLastFri)
+    if (tradeStart.getTime() === lastFri.getTime()) {
+      return { canRefresh: false, reason: `上一交易日（周五 ${formatTradeDate(sourceTradeDate)}）数据已是最新` }
+    }
+  }
+
+  if (diffDays > 1) {
+    return { canRefresh: true, reason: `数据交易日：${formatTradeDate(sourceTradeDate)}，可更新` }
+  }
+
+  return { canRefresh: false, reason: `数据交易日：${formatTradeDate(sourceTradeDate)}，已是最新` }
 }
 
 function buildSnapshotName(stockName: string, ticker: string, sourceTradeDate?: string): string {
@@ -215,22 +239,12 @@ function App() {
     }
   }
 
-  function canRefreshInAnalyzer(): boolean {
-    return form.dataMode !== 'manual' && form.ticker.trim().length > 0
-  }
-
-  function canRefreshHistoryItem(item: SearchHistoryEntry): boolean {
-    return item.form.dataMode !== 'manual' && item.ticker.trim().length > 0
-  }
-
   const result = useMemo(() => analyze(form), [form])
   const finalGrade = grade(result.marginSafety)
   const sensitivityMax = Math.max(1, ...result.sensitivity.map((s) => s.value))
   const activeStockName = currentStockName || searchHistory.find((item) => item.ticker === form.ticker)?.stockName || form.ticker || '未命名股票'
   const compareA = snapshots.find((s) => s.id === compareAId) || snapshots[0]
   const compareB = snapshots.find((s) => s.id === compareBId) || snapshots[1]
-  const canRefreshCurrent = canRefreshInAnalyzer()
-  const showRefreshButton = shouldShowRefreshButton(currentSourceTradeDate)
   const backtestSeries = useMemo(() => buildBacktestSeries(snapshots), [snapshots])
   const attribution = useMemo(
     () => (compareA && compareB ? computeAssumptionAttribution(compareA, compareB, ATTRIBUTION_FIELDS) : null),
@@ -320,6 +334,12 @@ function App() {
   }
 
   function handleSwitchView(nextView: 'analyzer' | 'history' | 'review'): void {
+    if (nextView === 'analyzer') {
+      setForm(DEFAULT_FORM)
+      setCurrentStockName('')
+      setCurrentSourceTradeDate(undefined)
+      setSyncStatus('')
+    }
     setView(nextView)
     setSnapshotMessage('')
     setSnapshotDraftName('')
@@ -406,23 +426,6 @@ function App() {
                   <button type="button" disabled={loadingTushare} onClick={() => handleFetchTushare(false)}>
                     {loadingTushare ? '同步中...' : '从 TuShare 加载'}
                   </button>
-                </div>
-                <div className="refresh-row">
-                  <button
-                    type="button"
-                    className={canRefreshCurrent ? '' : 'muted-action'}
-                    disabled={loadingTushare || !canRefreshCurrent}
-                    onClick={() => handleFetchTushare(true)}
-                  >
-                    {loadingTushare ? '同步中...' : '更新数据'}
-                  </button>
-                  <span className={canRefreshCurrent ? '' : 'status-muted'}>
-                    {canRefreshCurrent
-                      ? (showRefreshButton
-                        ? `当前数据交易日：${formatTradeDate(currentSourceTradeDate)}（超过 1 天）`
-                        : `当前数据交易日：${formatTradeDate(currentSourceTradeDate)}（可手动更新）`)
-                      : '请先输入股票代码后再更新'}
-                  </span>
                 </div>
                 {syncStatus ? <p className="status-note">{syncStatus}</p> : null}
               </>
@@ -556,14 +559,22 @@ function App() {
                     </div>
                     <div className="history-actions">
                       <button type="button" onClick={() => handleSelectHistory(item)}>进入估值页</button>
-                      <button
-                        type="button"
-                        className={canRefreshHistoryItem(item) ? '' : 'muted-action'}
-                        disabled={loadingTushare || !canRefreshHistoryItem(item)}
-                        onClick={() => void handleRefreshHistoryItem(item)}
-                      >
-                        {updatingHistoryId === item.id ? '同步中...' : '更新数据'}
-                      </button>
+                      {(() => {
+                        const rs = getRefreshStatus(item.sourceTradeDate)
+                        const manualMode = item.form.dataMode === 'manual'
+                        const disabled = loadingTushare || manualMode || !rs.canRefresh
+                        return (
+                          <button
+                            type="button"
+                            className={disabled ? 'muted-action' : ''}
+                            disabled={disabled}
+                            title={manualMode ? '手工模式不支持更新' : rs.reason}
+                            onClick={() => void handleRefreshHistoryItem(item)}
+                          >
+                            {updatingHistoryId === item.id ? '同步中...' : '更新数据'}
+                          </button>
+                        )
+                      })()}
                       <button type="button" onClick={() => handleAddSnapshotFromHistory(item)}>添加快照</button>
                       <button type="button" onClick={() => handleRemoveHistory(item.id)}>删除</button>
                     </div>
