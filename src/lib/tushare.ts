@@ -1,7 +1,9 @@
 import type { FormState, TushareLoadResult } from '../types'
+import { getStorage, getStorageKey } from './storage'
 
 const DEFAULT_TUSHARE_URL = '/api/tushare/proxy'
-const CACHE_PREFIX = 'finanalyzr.tushare.v1'
+const STORAGE = getStorage()
+const CACHE_PREFIX = getStorageKey('tushare.v1')
 const TTL_MS = 1000 * 60 * 60 * 6
 
 type TushareResponse<T> = {
@@ -70,23 +72,23 @@ function toTsCode(raw: string): string {
 }
 
 function readCache<T>(key: string): T | null {
-  const raw = localStorage.getItem(key)
+  const raw = STORAGE.getItem(key)
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as { expiresAt: number; value: T }
     if (Date.now() > parsed.expiresAt) {
-      localStorage.removeItem(key)
+      STORAGE.removeItem(key)
       return null
     }
     return parsed.value
   } catch {
-    localStorage.removeItem(key)
+    STORAGE.removeItem(key)
     return null
   }
 }
 
 function writeCache<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify({ expiresAt: Date.now() + TTL_MS, value }))
+  STORAGE.setItem(key, JSON.stringify({ expiresAt: Date.now() + TTL_MS, value }))
 }
 
 async function tushareCall<T>(

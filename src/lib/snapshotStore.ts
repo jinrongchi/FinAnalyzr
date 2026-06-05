@@ -1,6 +1,8 @@
 import type { AnalysisResult, FormState, Snapshot } from '../types'
+import { getStorage, getStorageKey } from './storage'
 
-const STORAGE_KEY = 'finanalyzr.snapshots.v1'
+const STORAGE = getStorage()
+const STORAGE_KEY = getStorageKey('snapshots.v1')
 const MAX_SNAPSHOTS = 50
 
 function safeParse(raw: string | null): Snapshot[] {
@@ -15,7 +17,7 @@ function safeParse(raw: string | null): Snapshot[] {
 }
 
 export function loadSnapshots(): Snapshot[] {
-  return safeParse(localStorage.getItem(STORAGE_KEY))
+  return safeParse(STORAGE.getItem(STORAGE_KEY))
 }
 
 export function saveSnapshot(form: FormState, result: AnalysisResult, label: string): Snapshot {
@@ -28,11 +30,11 @@ export function saveSnapshot(form: FormState, result: AnalysisResult, label: str
     result,
   }
   const next = [snapshot, ...existing].slice(0, MAX_SNAPSHOTS)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))
   return snapshot
 }
 
 export function deleteSnapshot(id: string): void {
   const next = loadSnapshots().filter((s) => s.id !== id)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))
 }

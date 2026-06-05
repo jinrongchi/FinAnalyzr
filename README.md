@@ -72,6 +72,37 @@ TUSHARE_PROXY_PORT=8787
 VITE_TUSHARE_PROXY_URL=your_proxy_url
 ```
 
+## 本地存储说明
+
+- 应用使用浏览器存储保存搜索历史、快照和 TuShare 缓存。
+- 默认使用 `localStorage`，在浏览器普通模式下通常会长期保留。
+- TuShare 缓存有 6 小时有效期，过期会在读取时自动删除。
+- 搜索历史和快照没有按时间自动过期，仅保留数量上限（历史 120 条、快照 50 条）。
+
+### 存储位置与可配置项
+
+受浏览器安全模型限制，前端代码不能自定义磁盘路径（例如指定到 D 盘目录）。
+
+你可以配置“存储位置类型”和“存储命名空间”：
+
+```bash
+# local (默认) 或 session
+VITE_STORAGE_DRIVER=local
+
+# 键名前缀，默认 finanalyzr
+VITE_STORAGE_NAMESPACE=finanalyzr
+```
+
+- `VITE_STORAGE_DRIVER=local`：数据写入 `localStorage`（持久化，直到手动清理/浏览器策略清理）。
+- `VITE_STORAGE_DRIVER=session`：数据写入 `sessionStorage`（标签页会话结束后清除）。
+- `VITE_STORAGE_NAMESPACE`：用于隔离键前缀，避免与其他环境或应用冲突。
+
+示例键名：
+
+- `finanalyzr.search-history.v1`
+- `finanalyzr.snapshots.v1`
+- `finanalyzr.tushare.v1:600519.SH`
+
 ## 免责声明
 
 本工具仅用于学习研究，不构成投资建议。投资有风险，决策需独立判断。

@@ -1,6 +1,8 @@
 import type { FormState, SearchHistoryEntry } from '../types'
+import { getStorage, getStorageKey } from './storage'
 
-const STORAGE_KEY = 'finanalyzr.search-history.v1'
+const STORAGE = getStorage()
+const STORAGE_KEY = getStorageKey('search-history.v1')
 const MAX_ITEMS = 120
 
 function parse(raw: string | null): SearchHistoryEntry[] {
@@ -14,11 +16,11 @@ function parse(raw: string | null): SearchHistoryEntry[] {
 }
 
 function persist(items: SearchHistoryEntry[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_ITEMS)))
+  STORAGE.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_ITEMS)))
 }
 
 export function loadSearchHistory(): SearchHistoryEntry[] {
-  const items = parse(localStorage.getItem(STORAGE_KEY))
+  const items = parse(STORAGE.getItem(STORAGE_KEY))
   return items.sort((a, b) => new Date(b.fetchedAt).getTime() - new Date(a.fetchedAt).getTime())
 }
 
