@@ -1,9 +1,6 @@
-export type DataMode = 'api-first' | 'manual'
-
 export type FormState = {
   ticker: string
   price: number
-  dataMode: DataMode
   fcf0: number
   forecastYears: number
   fcfGrowth: number

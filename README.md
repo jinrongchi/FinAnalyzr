@@ -12,7 +12,7 @@ A股长期价值投资理念 + 股票价值评估工具。
 - 股票历史页：复用历史查询记录、添加快照、按规则更新数据
 - 历史复盘页：快照列表、版本对比、回测与归因分析
 - 快照逻辑：支持同名覆盖确认，保存结果在对应页面提示
-- 手工模式：不展示 TuShare 同步能力
+- TuShare Token 来源优先级：UI 设置 > 服务器 `.env` (`TUSHARE_TOKEN`)
 
 ## 更新数据规则
 
@@ -72,6 +72,10 @@ TUSHARE_PROXY_PORT=8787
 VITE_TUSHARE_PROXY_URL=your_proxy_url
 ```
 
+页面顶部提供 TuShare Token 管理区。保存后只显示 `Token Saved` 状态，不显示明文 Token；点击 `Change Token` 可修改。
+
+当服务器 `.env` 已配置 `TUSHARE_TOKEN` 时，页面会显示 `the token is already set from server side`，并允许直接启用 TuShare 同步。用户仍可在 UI 中设置新 token 覆盖使用，优先级为：UI 设置 > `.env`。
+
 ## 本地存储说明
 
 - 应用使用浏览器存储保存搜索历史、快照和 TuShare 缓存。
@@ -102,6 +106,7 @@ VITE_STORAGE_NAMESPACE=finanalyzr
 - `finanalyzr.search-history.v1`
 - `finanalyzr.snapshots.v1`
 - `finanalyzr.tushare.v1:600519.SH`
+- `finanalyzr.tushare-token.v1`
 
 ## 免责声明
 

@@ -3,7 +3,6 @@ import type { FormState } from '../types'
 export const DEFAULT_FORM: FormState = {
   ticker: '',
   price: 0,
-  dataMode: 'api-first',
   fcf0: 0,
   forecastYears: 5,
   fcfGrowth: 0,

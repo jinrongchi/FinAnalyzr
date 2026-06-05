@@ -1,9 +1,10 @@
 import type { AnalysisResult, FormState, Snapshot } from '../types'
+import { APP_LIMITS } from '../config'
 import { getStorage, getStorageKey } from './storage'
 
 const STORAGE = getStorage()
 const STORAGE_KEY = getStorageKey('snapshots.v1')
-const MAX_SNAPSHOTS = 50
+const MAX_SNAPSHOTS = APP_LIMITS.snapshotsMaxItems
 
 function safeParse(raw: string | null): Snapshot[] {
   if (!raw) return []

@@ -312,6 +312,29 @@ select:focus {
   gap: 10px;
 }
 
+.token-strip {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px 8px;
+}
+
+.token-strip-inner {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
+  box-shadow: var(--shadow);
+}
+
+.token-strip-inner input {
+  min-width: 260px;
+  max-width: 420px;
+}
+
 .nav-btn {
   background: #fff;
   color: var(--ink);
@@ -353,6 +376,10 @@ select:focus {
 
 .snapshot-grid {
   align-items: end;
+}
+
+.primary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .review-layout {
@@ -522,6 +549,10 @@ select:focus {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-grid {
     grid-template-columns: 1fr;
   }
 

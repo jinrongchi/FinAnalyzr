@@ -1,10 +1,12 @@
 import type { FormState, TushareLoadResult } from '../types'
+import { TUSHARE_CACHE_TTL_MS } from '../config'
+import { logger } from './logger'
 import { getStorage, getStorageKey } from './storage'
 
 const DEFAULT_TUSHARE_URL = '/api/tushare/proxy'
 const STORAGE = getStorage()
 const CACHE_PREFIX = getStorageKey('tushare.v1')
-const TTL_MS = 1000 * 60 * 60 * 6
+const TTL_MS = TUSHARE_CACHE_TTL_MS
 
 type TushareResponse<T> = {
   code: number
@@ -64,6 +66,14 @@ function getApiUrl(): string {
   return import.meta.env.VITE_TUSHARE_PROXY_URL || DEFAULT_TUSHARE_URL
 }
 
+export function getTushareHealthUrl(): string {
+  const apiUrl = getApiUrl()
+  if (apiUrl.endsWith('/proxy')) {
+    return apiUrl.slice(0, -'/proxy'.length) + '/health'
+  }
+  return `${apiUrl.replace(/\/$/, '')}/health`
+}
+
 function toTsCode(raw: string): string {
   const clean = raw.trim().toUpperCase()
   if (clean.includes('.')) return clean
@@ -97,7 +107,7 @@ async function tushareCall<T>(
   params: Record<string, string>,
   fields: string,
 ): Promise<T[]> {
-  console.info('[FinAnalyzr] TuShare call triggered', { apiName, params, fields })
+  logger.info('TuShare call triggered', { apiName, params, fields })
 
   const body = {
     api_name: apiName,
@@ -121,7 +131,7 @@ async function tushareCall<T>(
     throw new Error(`TuShare 返回错误: ${json.msg || json.code}`)
   }
 
-  console.info('[FinAnalyzr] TuShare call response', {
+  logger.info('TuShare call response', {
     apiName,
     code: json.code,
     rows: json.data?.items?.length || 0,
@@ -147,7 +157,7 @@ export async function loadFromTushare(
   const cacheKey = `${CACHE_PREFIX}:${tsCode}`
   const cached = forceRefresh ? null : readCache<TushareLoadResult>(cacheKey)
   if (cached) {
-    console.info('[FinAnalyzr] TuShare cache hit', { tsCode, cacheKey })
+    logger.info('TuShare cache hit', { tsCode, cacheKey })
     return {
       ...cached,
       stockName: cached.stockName || tsCode,
@@ -155,7 +165,7 @@ export async function loadFromTushare(
     }
   }
 
-  console.info('[FinAnalyzr] TuShare fetch start', { tsCode, forceRefresh })
+  logger.info('TuShare fetch start', { tsCode, forceRefresh })
 
   const notes: string[] = []
 
@@ -308,7 +318,7 @@ export async function loadFromTushare(
   }
 
   writeCache(cacheKey, result)
-  console.info('[FinAnalyzr] TuShare fetch completed', {
+  logger.info('TuShare fetch completed', {
     tsCode,
     sourceTradeDate: result.sourceTradeDate,
     stockName: result.stockName,

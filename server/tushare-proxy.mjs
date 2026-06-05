@@ -135,8 +135,11 @@ async function callUpstream(body, retries = 2) {
 }
 
 const server = createServer(async (req, res) => {
-  if (req.method === 'GET' && req.url === '/health') {
-    sendJson(res, 200, { ok: true })
+  if (req.method === 'GET' && (req.url === '/health' || req.url === '/api/tushare/health')) {
+    sendJson(res, 200, {
+      ok: true,
+      hasServerToken: Boolean(SERVER_TOKEN),
+    })
     return
   }
 

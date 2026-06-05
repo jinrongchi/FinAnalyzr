@@ -1,9 +1,11 @@
 import type { FormState, SearchHistoryEntry } from '../types'
+import { APP_LIMITS } from '../config'
+import { logger } from './logger'
 import { getStorage, getStorageKey } from './storage'
 
 const STORAGE = getStorage()
 const STORAGE_KEY = getStorageKey('search-history.v1')
-const MAX_ITEMS = 120
+const MAX_ITEMS = APP_LIMITS.searchHistoryMaxItems
 
 function parse(raw: string | null): SearchHistoryEntry[] {
   if (!raw) return []
@@ -48,7 +50,7 @@ export function upsertSearchHistory(input: {
   const next = [entry, ...existing]
   persist(next)
 
-  console.info('[FinAnalyzr] search-history upsert', {
+  logger.info('search-history upsert', {
     id: entry.id,
     ticker: entry.ticker,
     sourceTradeDate: entry.sourceTradeDate,
@@ -60,5 +62,5 @@ export function upsertSearchHistory(input: {
 export function removeSearchHistory(id: string): void {
   const next = loadSearchHistory().filter((item) => item.id !== id)
   persist(next)
-  console.info('[FinAnalyzr] search-history remove', { id })
+  logger.info('search-history remove', { id })
 }
