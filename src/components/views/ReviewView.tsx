@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { COMPARISON_FIELDS } from '../../lib/comparisonFields'
 import { formatMaybeNumber, formatMaybePct, formatMaybeYuan } from '../../lib/displayFormat'
 import { formatTradeDate } from '../../lib/historyDate'
@@ -29,13 +29,40 @@ function tagColorClass(tag: string): string {
 export function ReviewView(props: ReviewViewProps) {
   const [snapshotQuery, setSnapshotQuery] = useState('')
   const [snapshotValuationFilter, setSnapshotValuationFilter] = useState<'all' | 'undervalued' | 'overvalued'>('all')
-  const [snapshotSort, setSnapshotSort] = useState<'newest' | 'oldest' | 'gap-desc' | 'gap-asc'>('newest')
+  const [sortConfig, setSortConfig] = useState<{
+    priority: Array<'time' | 'stock' | 'gap' | 'valuation'>
+    direction: Record<'time' | 'stock' | 'gap' | 'valuation', 'asc' | 'desc'>
+  }>({
+    priority: ['time'],
+    direction: {
+      time: 'desc',
+      stock: 'asc',
+      gap: 'desc',
+      valuation: 'asc',
+    },
+  })
   const [addingTagForId, setAddingTagForId] = useState<string | null>(null)
   const [newTagsInput, setNewTagsInput] = useState('')
   const [editingTag, setEditingTag] = useState<{ snapshotId: string; originalTag: string; value: string } | null>(null)
+  const [showOtherStocksForB, setShowOtherStocksForB] = useState(false)
 
-  const aOptions = props.snapshots.filter((s) => s.id !== props.compareBId)
-  const bOptions = props.snapshots.filter((s) => s.id !== props.compareAId)
+  const aOptions = props.snapshots
+  const selectedATicker = props.compareA?.form.ticker
+  const bOptions = props.snapshots.filter((s) => {
+    if (s.id === props.compareAId) return false
+    if (showOtherStocksForB || !selectedATicker) return true
+    return s.form.ticker === selectedATicker
+  })
+
+  useEffect(() => {
+    if (showOtherStocksForB || !props.compareAId) return
+    if (!props.compareBId) return
+    if (bOptions.some((s) => s.id === props.compareBId)) return
+
+    // Keep B aligned with current A scope; fall back to the first eligible option.
+    props.onCompareBIdChange(bOptions[0]?.id || '')
+  }, [showOtherStocksForB, props.compareAId, props.compareBId, bOptions, props.onCompareBIdChange])
+
   const filteredSnapshots = useMemo(() => {
     const keyword = snapshotQuery.trim().toLowerCase()
     const filtered = props.snapshots.filter((s) => {
@@ -57,12 +84,76 @@ export function ReviewView(props: ReviewViewProps) {
     return [...filtered].sort((a, b) => {
       const aGap = a.result.intrinsicValue - a.form.price
       const bGap = b.result.intrinsicValue - b.form.price
-      if (snapshotSort === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      if (snapshotSort === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      if (snapshotSort === 'gap-desc') return bGap - aGap
-      return aGap - bGap
+
+      const valuationRank = (gap: number): number => {
+        if (gap > 0) return 0 // low price vs intrinsic => undervalued
+        if (gap < 0) return 2 // overvalued
+        return 1 // fairly valued
+      }
+
+      for (const field of sortConfig.priority) {
+        let cmp = 0
+
+        if (field === 'time') {
+          const aTime = Number(a.sourceTradeDate || 0)
+          const bTime = Number(b.sourceTradeDate || 0)
+          cmp = aTime - bTime
+        } else if (field === 'stock') {
+          cmp = a.form.ticker.localeCompare(b.form.ticker, 'zh-CN')
+        } else if (field === 'gap') {
+          cmp = aGap - bGap
+        } else if (field === 'valuation') {
+          cmp = valuationRank(aGap) - valuationRank(bGap)
+        }
+
+        if (cmp !== 0) {
+          return sortConfig.direction[field] === 'asc' ? cmp : -cmp
+        }
+      }
+
+      // Final tie-breaker keeps latest snapshots first.
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  }, [props.snapshots, snapshotQuery, snapshotSort, snapshotValuationFilter])
+  }, [props.snapshots, snapshotQuery, snapshotValuationFilter, sortConfig])
+
+  function toggleSort(field: 'time' | 'stock' | 'gap' | 'valuation'): void {
+    setSortConfig((prev) => ({
+      ...(() => {
+        const active = prev.priority.includes(field)
+        if (!active) {
+          return {
+            priority: [field, ...prev.priority],
+            direction: {
+              ...prev.direction,
+              [field]: 'desc' as const,
+            },
+          }
+        }
+
+        const currentDir = prev.direction[field]
+        if (currentDir === 'desc') {
+          return {
+            priority: [field, ...prev.priority.filter((f) => f !== field)],
+            direction: {
+              ...prev.direction,
+              [field]: 'asc' as const,
+            },
+          }
+        }
+
+        return {
+          priority: prev.priority.filter((f) => f !== field),
+          direction: prev.direction,
+        }
+      })(),
+    }))
+  }
+
+  function sortMarker(field: 'time' | 'stock' | 'gap' | 'valuation'): string {
+    const index = sortConfig.priority.indexOf(field)
+    if (index < 0) return ''
+    return sortConfig.direction[field] === 'asc' ? ' ↑' : ' ↓'
+  }
 
   function parseTags(raw: string): string[] {
     return raw.split(',').map((tag) => tag.trim()).filter(Boolean)
@@ -123,12 +214,6 @@ export function ReviewView(props: ReviewViewProps) {
                 <option value="undervalued">仅低估（内在价值 {'>='} 当前股价）</option>
                 <option value="overvalued">仅高估（内在价值 {'<'} 当前股价）</option>
               </select>
-              <select value={snapshotSort} onChange={(e) => setSnapshotSort(e.target.value as 'newest' | 'oldest' | 'gap-desc' | 'gap-asc')}>
-                <option value="newest">按时间：最新在前</option>
-                <option value="oldest">按时间：最早在前</option>
-                <option value="gap-desc">按差距：高到低</option>
-                <option value="gap-asc">按差距：低到高</option>
-              </select>
             </div>
 
             {filteredSnapshots.length === 0 ? <p className="status-note">没有符合筛选条件的快照。</p> : (
@@ -137,12 +222,44 @@ export function ReviewView(props: ReviewViewProps) {
                   <thead>
                     <tr>
                       <th>快照</th>
-                      <th>时间</th>
-                      <th>股票</th>
+                      <th className="sortable-th">
+                        <button
+                          type="button"
+                          className="th-sort-btn"
+                          onClick={() => toggleSort('time')}
+                        >
+                          时间{sortMarker('time')}
+                        </button>
+                      </th>
+                      <th className="sortable-th">
+                        <button
+                          type="button"
+                          className="th-sort-btn"
+                          onClick={() => toggleSort('stock')}
+                        >
+                          股票{sortMarker('stock')}
+                        </button>
+                      </th>
                       <th>内在价值</th>
                       <th>当前股价</th>
-                      <th>差距%</th>
-                      <th>估值状态</th>
+                      <th className="sortable-th">
+                        <button
+                          type="button"
+                          className="th-sort-btn"
+                          onClick={() => toggleSort('gap')}
+                        >
+                          差距%{sortMarker('gap')}
+                        </button>
+                      </th>
+                      <th className="sortable-th">
+                        <button
+                          type="button"
+                          className="th-sort-btn"
+                          onClick={() => toggleSort('valuation')}
+                        >
+                          估值状态{sortMarker('valuation')}
+                        </button>
+                      </th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -237,6 +354,14 @@ export function ReviewView(props: ReviewViewProps) {
               <option value="" disabled>请选择版本 B</option>
               {bOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
+            <span className="compare-b-scope">
+              <input
+                type="checkbox"
+                checked={showOtherStocksForB}
+                onChange={(e) => setShowOtherStocksForB(e.target.checked)}
+              />
+              显示其他股票
+            </span>
           </label>
         </div>
 

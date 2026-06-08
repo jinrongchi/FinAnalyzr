@@ -25,21 +25,8 @@ export function useSnapshots() {
     let nextAId = snapshots.some((s) => s.id === compareAId) ? compareAId : (snapshots[0]?.id || '')
     let nextBId = snapshots.some((s) => s.id === compareBId) ? compareBId : ''
 
-    if (!nextBId) {
-      nextBId = snapshots.find((s) => s.id !== nextAId)?.id || ''
-    }
-
     if (nextAId && nextBId && nextAId === nextBId) {
       nextBId = snapshots.find((s) => s.id !== nextAId)?.id || ''
-    }
-
-    // Keep comparison direction stable: A is older, B is newer.
-    const a = snapshots.find((s) => s.id === nextAId)
-    const b = snapshots.find((s) => s.id === nextBId)
-    if (a && b && new Date(a.createdAt).getTime() > new Date(b.createdAt).getTime()) {
-      const oldA = nextAId
-      nextAId = nextBId
-      nextBId = oldA
     }
 
     if (nextAId !== compareAId) setCompareAId(nextAId)

@@ -399,7 +399,7 @@ select:focus {
 
 .snapshot-filters {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
+  grid-template-columns: 1.5fr 1fr;
   gap: 10px;
 }
 
@@ -427,6 +427,31 @@ select:focus {
 .snapshot-table thead th {
   background: #fff7ed;
   font-weight: 700;
+}
+
+.sortable-th {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.th-sort-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9a3412;
+  font: inherit;
+  font-weight: 700;
+  box-shadow: none;
+  transform: none;
+  transition: none;
+  cursor: pointer;
+}
+
+.th-sort-btn:hover {
+  transform: none;
+  box-shadow: 0 4px 10px rgba(154, 52, 18, 0.2);
+  color: #9a3412;
+  cursor: pointer;
 }
 
 .snapshot-table tbody tr:last-child td {
@@ -677,6 +702,21 @@ select:focus {
 .compare-row.emphasis {
   font-weight: 700;
   background: #f8fafc;
+}
+
+.compare-b-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.compare-b-scope input {
+  width: auto;
+  margin: 0;
+  padding: 0;
 }
 
 .delta-up {
