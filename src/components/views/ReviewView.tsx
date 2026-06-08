@@ -27,6 +27,7 @@ function tagColorClass(tag: string): string {
 }
 
 export function ReviewView(props: ReviewViewProps) {
+  const { compareAId, compareBId, onCompareBIdChange } = props
   const [snapshotQuery, setSnapshotQuery] = useState('')
   const [snapshotValuationFilter, setSnapshotValuationFilter] = useState<'all' | 'undervalued' | 'overvalued'>('all')
   const [sortConfig, setSortConfig] = useState<{
@@ -46,22 +47,24 @@ export function ReviewView(props: ReviewViewProps) {
   const [editingTag, setEditingTag] = useState<{ snapshotId: string; originalTag: string; value: string } | null>(null)
   const [showOtherStocksForB, setShowOtherStocksForB] = useState(false)
 
-  const aOptions = props.snapshots
+  const aOptions = useMemo(() => props.snapshots, [props.snapshots])
   const selectedATicker = props.compareA?.form.ticker
-  const bOptions = props.snapshots.filter((s) => {
-    if (s.id === props.compareAId) return false
-    if (showOtherStocksForB || !selectedATicker) return true
-    return s.form.ticker === selectedATicker
-  })
+  const bOptions = useMemo(() => {
+    return props.snapshots.filter((s) => {
+      if (s.id === compareAId) return false
+      if (showOtherStocksForB || !selectedATicker) return true
+      return s.form.ticker === selectedATicker
+    })
+  }, [props.snapshots, compareAId, showOtherStocksForB, selectedATicker])
 
   useEffect(() => {
-    if (showOtherStocksForB || !props.compareAId) return
-    if (!props.compareBId) return
-    if (bOptions.some((s) => s.id === props.compareBId)) return
+    if (showOtherStocksForB || !compareAId) return
+    if (!compareBId) return
+    if (bOptions.some((s) => s.id === compareBId)) return
 
     // Keep B aligned with current A scope; fall back to the first eligible option.
-    props.onCompareBIdChange(bOptions[0]?.id || '')
-  }, [showOtherStocksForB, props.compareAId, props.compareBId, bOptions, props.onCompareBIdChange])
+    onCompareBIdChange(bOptions[0]?.id || '')
+  }, [showOtherStocksForB, compareAId, compareBId, bOptions, onCompareBIdChange])
 
   const filteredSnapshots = useMemo(() => {
     const keyword = snapshotQuery.trim().toLowerCase()

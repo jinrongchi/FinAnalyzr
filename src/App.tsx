@@ -105,14 +105,13 @@ function App() {
     setHistoryMessage,
     setHistoryItemFeedback,
     setSyncStatus,
-    setView,
+    setView: (nextView) => {
+      if (nextView !== 'history') {
+        setHistoryItemFeedback(null)
+      }
+      setView(nextView)
+    },
   })
-
-  useEffect(() => {
-    if (view !== 'history') {
-      setHistoryItemFeedback(null)
-    }
-  }, [view])
 
   async function handleFetchTushare(forceRefresh = false): Promise<void> {
     setSnapshotMessage('')
@@ -135,7 +134,17 @@ function App() {
   const result = useMemo(() => analyze(form), [form])
   const finalGrade = grade(result.marginSafety)
   const sensitivityMax = Math.max(1, ...result.sensitivity.map((s) => s.value))
-  const activeStockName = currentStockName || searchHistory.find((item) => item.ticker === form.ticker)?.stockName || form.ticker || '未命名股票'
+  const stockNameByTicker = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of searchHistory) {
+      map.set(item.ticker, item.stockName)
+    }
+    return map
+  }, [searchHistory])
+  const activeStockName = useMemo(
+    () => currentStockName || stockNameByTicker.get(form.ticker) || form.ticker || '未命名股票',
+    [currentStockName, stockNameByTicker, form.ticker],
+  )
   const backtestSeries = useMemo(() => {
     if (!compareAId || !compareBId || compareAId === compareBId) return []
     return buildBacktestSeries([compareA, compareB].filter((s): s is NonNullable<typeof s> => Boolean(s)))
@@ -144,28 +153,34 @@ function App() {
     () => (compareA && compareB ? computeAssumptionAttribution(compareA, compareB, ATTRIBUTION_FIELDS) : null),
     [compareA, compareB],
   )
-  const backtestMax = Math.max(
-    0.01,
-    ...backtestSeries.flatMap((point) => [
-      Math.abs(point.predictedReturn),
-      Math.abs(point.realizedReturn),
-      Math.abs(point.predictionError),
-    ]),
+  const backtestMax = useMemo(
+    () => Math.max(
+      0.01,
+      ...backtestSeries.flatMap((point) => [
+        Math.abs(point.predictedReturn),
+        Math.abs(point.realizedReturn),
+        Math.abs(point.predictionError),
+      ]),
+    ),
+    [backtestSeries],
   )
-  const attributionMax = Math.max(0.01, ...(attribution?.items.map((item) => Math.abs(item.contribution)) || [0]))
+  const attributionMax = useMemo(
+    () => Math.max(0.01, ...(attribution?.items.map((item) => Math.abs(item.contribution)) || [0])),
+    [attribution],
+  )
 
   useEffect(() => {
     if (snapshotDraftName.trim()) return
     if (!form.ticker.trim()) return
 
-    const stockLabel = currentStockName || searchHistory.find((item) => item.ticker === form.ticker)?.stockName || form.ticker
+    const stockLabel = currentStockName || stockNameByTicker.get(form.ticker) || form.ticker
     setSnapshotDraftName(buildSnapshotName(stockLabel, form.ticker, currentSourceTradeDate))
   }, [
     snapshotDraftName,
     form.ticker,
     currentStockName,
     currentSourceTradeDate,
-    searchHistory,
+    stockNameByTicker,
     setSnapshotDraftName,
   ])
 
@@ -205,6 +220,9 @@ function App() {
   }
 
   function handleSwitchView(nextView: 'analyzer' | 'history' | 'review'): void {
+    if (nextView !== 'history') {
+      setHistoryItemFeedback(null)
+    }
     if (nextView === 'analyzer') {
       resetForm()
       resetCurrentStockContext()

@@ -1,17 +1,49 @@
 import type { FormState, SearchHistoryEntry } from '../types'
 import { APP_LIMITS } from '../config'
+import { DEFAULT_FORM } from '../data/defaults'
 import { logger } from './logger'
 import { getStorage, getStorageKey } from './storage'
 
 const STORAGE = getStorage()
 const STORAGE_KEY = getStorageKey('search-history.v1')
 const MAX_ITEMS = APP_LIMITS.searchHistoryMaxItems
+let cachedRaw: string | null | undefined
+let cachedItems: SearchHistoryEntry[] = []
+
+type LegacyHistoryEntry = Partial<SearchHistoryEntry> & {
+  fetchedAt?: string
+  ticker?: string
+  form?: unknown
+}
+
+function normalizeForm(value: unknown): FormState {
+  if (!value || typeof value !== 'object') return DEFAULT_FORM
+  return {
+    ...DEFAULT_FORM,
+    ...(value as Partial<FormState>),
+  }
+}
 
 // Migrate legacy entries (with fetchedAt) to new format (with createdAt/updatedAt)
-function migrateEntry(entry: any): { entry: SearchHistoryEntry; migrated: boolean } {
+function migrateEntry(entry: LegacyHistoryEntry): { entry: SearchHistoryEntry | null; migrated: boolean } {
+  if (!entry.ticker) {
+    return { entry: null, migrated: false }
+  }
+
   // Already in new format
   if (entry.updatedAt && entry.createdAt) {
-    return { entry: entry as SearchHistoryEntry, migrated: false }
+    return {
+      entry: {
+        id: entry.ticker,
+        ticker: entry.ticker,
+        stockName: entry.stockName || entry.ticker,
+        sourceTradeDate: entry.sourceTradeDate,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        form: normalizeForm(entry.form),
+      },
+      migrated: false,
+    }
   }
 
   // Legacy format with fetchedAt
@@ -20,8 +52,10 @@ function migrateEntry(entry: any): { entry: SearchHistoryEntry; migrated: boolea
       entry: {
         ...entry,
         id: entry.ticker, // Convert old compound ID to ticker-only ID
+        stockName: entry.stockName || entry.ticker,
         createdAt: entry.fetchedAt,
         updatedAt: entry.fetchedAt,
+        form: normalizeForm(entry.form),
       },
       migrated: true,
     }
@@ -33,8 +67,10 @@ function migrateEntry(entry: any): { entry: SearchHistoryEntry; migrated: boolea
     entry: {
       ...entry,
       id: entry.ticker,
+      stockName: entry.stockName || entry.ticker,
       createdAt: entry.createdAt || entry.fetchedAt || now,
       updatedAt: entry.updatedAt || entry.fetchedAt || now,
+      form: normalizeForm(entry.form),
     },
     migrated: !entry.updatedAt,
   }
@@ -43,12 +79,13 @@ function migrateEntry(entry: any): { entry: SearchHistoryEntry; migrated: boolea
 function parse(raw: string | null): { items: SearchHistoryEntry[]; needsPersist: boolean } {
   if (!raw) return { items: [], needsPersist: false }
   try {
-    const parsed = JSON.parse(raw) as any[]
+    const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return { items: [], needsPersist: false }
+    const candidateEntries = parsed.filter((entry): entry is LegacyHistoryEntry => Boolean(entry) && typeof entry === 'object')
     
     // Migrate legacy entries and deduplicate by new ID (ticker only)
-    const migrations = parsed.map(migrateEntry)
-    const migrated = migrations.map((m) => m.entry)
+    const migrations = candidateEntries.map(migrateEntry)
+    const migrated = migrations.map((m) => m.entry).filter((entry): entry is SearchHistoryEntry => entry !== null)
     const needsPersist = migrations.some((m) => m.migrated)
     
     // Deduplicate: keep only the most recently updated entry per ticker
@@ -68,16 +105,27 @@ function parse(raw: string | null): { items: SearchHistoryEntry[]; needsPersist:
 
 function persist(items: SearchHistoryEntry[]): void {
   STORAGE.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_ITEMS)))
+  // Invalidate cache so subsequent reads observe the latest persisted payload.
+  cachedRaw = undefined
 }
 
 export function loadSearchHistory(): SearchHistoryEntry[] {
-  const { items, needsPersist } = parse(STORAGE.getItem(STORAGE_KEY))
+  const raw = STORAGE.getItem(STORAGE_KEY)
+  if (raw === cachedRaw) {
+    return cachedItems
+  }
+
+  const { items, needsPersist } = parse(raw)
   // Re-save if migration happened to persist the new format
   if (needsPersist && items.length > 0) {
     persist(items)
     logger.info('search-history migrated from legacy format', { count: items.length })
   }
-  return items.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+
+  const sorted = items.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  cachedRaw = STORAGE.getItem(STORAGE_KEY)
+  cachedItems = sorted
+  return sorted
 }
 
 export function upsertSearchHistory(input: {
@@ -89,7 +137,8 @@ export function upsertSearchHistory(input: {
 }): SearchHistoryEntry {
   const now = new Date().toISOString()
   const id = input.ticker // stable identity: ticker only
-  const existing = loadSearchHistory().find((item) => item.id === id)
+  const current = loadSearchHistory()
+  const existing = current.find((item) => item.id === id)
 
   const entry: SearchHistoryEntry = {
     id,
@@ -101,7 +150,7 @@ export function upsertSearchHistory(input: {
     form: input.form,
   }
 
-  const next = [entry, ...loadSearchHistory().filter((item) => item.id !== id)]
+  const next = [entry, ...current.filter((item) => item.id !== id)]
   persist(next)
 
   logger.info('search-history upsert', {

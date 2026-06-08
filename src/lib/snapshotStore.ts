@@ -5,6 +5,8 @@ import { getStorage, getStorageKey } from './storage'
 const STORAGE = getStorage()
 const STORAGE_KEY = getStorageKey('snapshots.v1')
 const MAX_SNAPSHOTS = APP_LIMITS.snapshotsMaxItems
+let cachedRaw: string | null | undefined
+let cachedItems: Snapshot[] = []
 
 function safeParse(raw: string | null): Snapshot[] {
   if (!raw) return []
@@ -26,7 +28,15 @@ function safeParse(raw: string | null): Snapshot[] {
 }
 
 export function loadSnapshots(): Snapshot[] {
-  return safeParse(STORAGE.getItem(STORAGE_KEY))
+  const raw = STORAGE.getItem(STORAGE_KEY)
+  if (raw === cachedRaw) {
+    return cachedItems
+  }
+
+  const parsed = safeParse(raw)
+  cachedRaw = raw
+  cachedItems = parsed
+  return parsed
 }
 
 export function saveSnapshot(
@@ -48,16 +58,19 @@ export function saveSnapshot(
   }
   const next = [snapshot, ...existing].slice(0, MAX_SNAPSHOTS)
   STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))
+  cachedRaw = undefined
   return snapshot
 }
 
 export function deleteSnapshot(id: string): void {
   const next = loadSnapshots().filter((s) => s.id !== id)
   STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))
+  cachedRaw = undefined
 }
 
 export function updateSnapshotTags(id: string, tags: string[]): void {
   const normalized = Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)))
   const next = loadSnapshots().map((s) => (s.id === id ? { ...s, tags: normalized } : s))
   STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))
+  cachedRaw = undefined
 }

@@ -186,8 +186,6 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(PORT, () => {
-  // eslint-disable-next-line no-console
   console.log(`[tushare-proxy] listening on http://localhost:${PORT}`)
-  // eslint-disable-next-line no-console
   console.log(`[tushare-proxy] upstream: ${UPSTREAM_URL}`)
 })

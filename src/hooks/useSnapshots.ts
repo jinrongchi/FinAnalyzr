@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { deleteSnapshot, loadSnapshots, saveSnapshot, updateSnapshotTags } from '../lib/snapshotStore'
 import type { AnalysisResult, FormState, Snapshot } from '../types'
 
@@ -12,26 +12,22 @@ export function useSnapshots() {
   const [compareAId, setCompareAId] = useState('')
   const [compareBId, setCompareBId] = useState('')
 
-  const compareA = useMemo(() => snapshots.find((s) => s.id === compareAId), [snapshots, compareAId])
-  const compareB = useMemo(() => snapshots.find((s) => s.id === compareBId), [snapshots, compareBId])
+  const effectiveCompareAId = useMemo(() => {
+    if (snapshots.length === 0) return ''
+    return snapshots.some((s) => s.id === compareAId) ? compareAId : (snapshots[0]?.id || '')
+  }, [snapshots, compareAId])
 
-  useEffect(() => {
-    if (snapshots.length === 0) {
-      if (compareAId) setCompareAId('')
-      if (compareBId) setCompareBId('')
-      return
+  const effectiveCompareBId = useMemo(() => {
+    if (!compareBId) return ''
+    if (!snapshots.some((s) => s.id === compareBId)) return ''
+    if (compareBId === effectiveCompareAId) {
+      return snapshots.find((s) => s.id !== effectiveCompareAId)?.id || ''
     }
+    return compareBId
+  }, [snapshots, compareBId, effectiveCompareAId])
 
-    let nextAId = snapshots.some((s) => s.id === compareAId) ? compareAId : (snapshots[0]?.id || '')
-    let nextBId = snapshots.some((s) => s.id === compareBId) ? compareBId : ''
-
-    if (nextAId && nextBId && nextAId === nextBId) {
-      nextBId = snapshots.find((s) => s.id !== nextAId)?.id || ''
-    }
-
-    if (nextAId !== compareAId) setCompareAId(nextAId)
-    if (nextBId !== compareBId) setCompareBId(nextBId)
-  }, [snapshots, compareAId, compareBId])
+  const compareA = useMemo(() => snapshots.find((s) => s.id === effectiveCompareAId), [snapshots, effectiveCompareAId])
+  const compareB = useMemo(() => snapshots.find((s) => s.id === effectiveCompareBId), [snapshots, effectiveCompareBId])
 
   function refreshSnapshots(): Snapshot[] {
     const next = loadSnapshots()
@@ -89,9 +85,9 @@ export function useSnapshots() {
     snapshots,
     compareA,
     compareB,
-    compareAId,
+    compareAId: effectiveCompareAId,
     setCompareAId,
-    compareBId,
+    compareBId: effectiveCompareBId,
     setCompareBId,
     saveSnapshotWithOverwrite,
     addSnapshotTags,
