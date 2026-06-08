@@ -38,6 +38,7 @@ function makeSnapshot(id: string, label: string, formPatch = {}): Snapshot {
     id,
     label,
     createdAt: new Date(Number(id) * 1000).toISOString(),
+    tags: [],
     form,
     result: analyze(form),
   }

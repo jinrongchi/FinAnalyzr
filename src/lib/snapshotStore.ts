@@ -9,9 +9,17 @@ const MAX_SNAPSHOTS = APP_LIMITS.snapshotsMaxItems
 function safeParse(raw: string | null): Snapshot[] {
   if (!raw) return []
   try {
-    const parsed = JSON.parse(raw) as Snapshot[]
+    const parsed = JSON.parse(raw) as Array<Partial<Snapshot>>
     if (!Array.isArray(parsed)) return []
-    return parsed
+    return parsed.map((item) => ({
+      id: item.id || crypto.randomUUID(),
+      createdAt: item.createdAt || new Date().toISOString(),
+      sourceTradeDate: item.sourceTradeDate,
+      tags: Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+      label: item.label || '',
+      form: item.form as Snapshot['form'],
+      result: item.result as Snapshot['result'],
+    }))
   } catch {
     return []
   }
@@ -21,11 +29,19 @@ export function loadSnapshots(): Snapshot[] {
   return safeParse(STORAGE.getItem(STORAGE_KEY))
 }
 
-export function saveSnapshot(form: FormState, result: AnalysisResult, label: string): Snapshot {
+export function saveSnapshot(
+  form: FormState,
+  result: AnalysisResult,
+  label: string,
+  sourceTradeDate?: string,
+  tags: string[] = [],
+): Snapshot {
   const existing = loadSnapshots()
   const snapshot: Snapshot = {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
+    sourceTradeDate,
+    tags,
     label: label.trim() || `${form.ticker} ${new Date().toLocaleString('zh-CN')}`,
     form,
     result,
@@ -37,5 +53,11 @@ export function saveSnapshot(form: FormState, result: AnalysisResult, label: str
 
 export function deleteSnapshot(id: string): void {
   const next = loadSnapshots().filter((s) => s.id !== id)
+  STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))
+}
+
+export function updateSnapshotTags(id: string, tags: string[]): void {
+  const normalized = Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)))
+  const next = loadSnapshots().map((s) => (s.id === id ? { ...s, tags: normalized } : s))
   STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))
 }

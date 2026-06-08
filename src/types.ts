@@ -57,6 +57,8 @@ export type TushareLoadResult = {
 export type Snapshot = {
   id: string
   createdAt: string
+  sourceTradeDate?: string
+  tags: string[]
   label: string
   form: FormState
   result: AnalysisResult
@@ -88,10 +90,11 @@ export type AttributionResult = {
 }
 
 export type SearchHistoryEntry = {
-  id: string
+  id: string // ticker only - stable identity
   ticker: string
   stockName: string
-  sourceTradeDate?: string
-  fetchedAt: string
+  sourceTradeDate?: string // data field, not part of identity
+  createdAt: string // when entry was first added
+  updatedAt: string // when entry was last refreshed
   form: FormState
 }

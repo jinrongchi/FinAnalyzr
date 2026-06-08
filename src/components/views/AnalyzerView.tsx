@@ -11,6 +11,7 @@ type AnalyzerViewProps = {
   loadingTushare: boolean
   syncStatus: string
   snapshotDraftName: string
+  snapshotDraftTags: string
   snapshotMessage: string
   currentSourceTradeDate?: string
   activeStockName: string
@@ -21,6 +22,7 @@ type AnalyzerViewProps = {
   onUpdateField: (name: keyof FormState, value: string) => void
   onFetchTushare: (forceRefresh?: boolean) => void
   onSnapshotDraftNameChange: (value: string) => void
+  onSnapshotDraftTagsChange: (value: string) => void
   onSaveSnapshot: () => void
 }
 
@@ -97,6 +99,14 @@ export function AnalyzerView(props: AnalyzerViewProps) {
               value={props.snapshotDraftName}
               onChange={(e) => props.onSnapshotDraftNameChange(e.target.value)}
               placeholder={buildSnapshotName(props.activeStockName, props.form.ticker, props.currentSourceTradeDate)}
+            />
+          </label>
+          <label>
+            快照标签（逗号分隔）
+            <input
+              value={props.snapshotDraftTags}
+              onChange={(e) => props.onSnapshotDraftTagsChange(e.target.value)}
+              placeholder="例如：白马, 半导体, 低估"
             />
           </label>
           <button type="button" onClick={props.onSaveSnapshot}>保存当前快照</button>

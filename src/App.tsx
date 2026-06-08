@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnalyzerView } from './components/views/AnalyzerView'
 import { HistoryView } from './components/views/HistoryView'
 import { ReviewView } from './components/views/ReviewView'
@@ -17,6 +17,8 @@ import { analyze, grade } from './lib/valuation'
 import type { SearchHistoryEntry } from './types'
 
 function App() {
+  const [historySnapshotFeedback, setHistorySnapshotFeedback] = useState<{ id: string; message: string } | null>(null)
+
   const {
     searchHistory,
     saveHistoryEntry,
@@ -60,6 +62,8 @@ function App() {
     compareBId,
     setCompareBId,
     saveSnapshotWithOverwrite,
+    addSnapshotTags,
+    setSnapshotTags,
     deleteSnapshotEntry,
   } = useSnapshots()
   const {
@@ -68,6 +72,8 @@ function App() {
     switchView,
     snapshotDraftName,
     setSnapshotDraftName,
+    snapshotDraftTags,
+    setSnapshotDraftTags,
     snapshotMessage,
     setSnapshotMessage,
     historyMessage,
@@ -101,12 +107,18 @@ function App() {
     setView,
   })
 
+  useEffect(() => {
+    if (view !== 'history') {
+      setHistorySnapshotFeedback(null)
+    }
+  }, [view])
+
   async function handleFetchTushare(forceRefresh = false): Promise<void> {
     setSnapshotMessage('')
     const synced = await syncAnalyzerForm(form, forceRefresh)
     if (!synced.ok) return
 
-    const { mergedForm, stockName, sourceTradeDate, fetchedAt } = synced.data
+    const { mergedForm, stockName, sourceTradeDate } = synced.data
     setForm(mergedForm)
     setSnapshotDraftName(buildSnapshotName(stockName, mergedForm.ticker, sourceTradeDate))
 
@@ -114,7 +126,6 @@ function App() {
       ticker: mergedForm.ticker,
       stockName,
       sourceTradeDate,
-      fetchedAt,
       form: mergedForm,
     })
     setHistoryMessage('')
@@ -124,7 +135,10 @@ function App() {
   const finalGrade = grade(result.marginSafety)
   const sensitivityMax = Math.max(1, ...result.sensitivity.map((s) => s.value))
   const activeStockName = currentStockName || searchHistory.find((item) => item.ticker === form.ticker)?.stockName || form.ticker || '未命名股票'
-  const backtestSeries = useMemo(() => buildBacktestSeries(snapshots), [snapshots])
+  const backtestSeries = useMemo(() => {
+    if (!compareAId || !compareBId || compareAId === compareBId) return []
+    return buildBacktestSeries([compareA, compareB].filter((s): s is NonNullable<typeof s> => Boolean(s)))
+  }, [compareA, compareAId, compareB, compareBId])
   const attribution = useMemo(
     () => (compareA && compareB ? computeAssumptionAttribution(compareA, compareB, ATTRIBUTION_FIELDS) : null),
     [compareA, compareB],
@@ -139,9 +153,28 @@ function App() {
   )
   const attributionMax = Math.max(0.01, ...(attribution?.items.map((item) => Math.abs(item.contribution)) || [0]))
 
+  useEffect(() => {
+    if (snapshotDraftName.trim()) return
+    if (!form.ticker.trim()) return
+
+    const stockLabel = currentStockName || searchHistory.find((item) => item.ticker === form.ticker)?.stockName || form.ticker
+    setSnapshotDraftName(buildSnapshotName(stockLabel, form.ticker, currentSourceTradeDate))
+  }, [
+    snapshotDraftName,
+    form.ticker,
+    currentStockName,
+    currentSourceTradeDate,
+    searchHistory,
+    setSnapshotDraftName,
+  ])
+
   function handleSaveSnapshot(): void {
     const snapshotName = snapshotDraftName.trim() || buildSnapshotName(activeStockName, form.ticker, currentSourceTradeDate)
-    const saved = saveSnapshotWithOverwrite(form, result, snapshotName)
+    const snapshotTags = snapshotDraftTags
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+    const saved = saveSnapshotWithOverwrite(form, result, snapshotName, currentSourceTradeDate, snapshotTags)
     if (!saved) return
     const message = saved.overwritten
       ? `已覆盖同名快照：${saved.created.label}`
@@ -159,12 +192,13 @@ function App() {
 
   function handleAddSnapshotFromHistory(item: SearchHistoryEntry): void {
     const label = buildSnapshotName(item.stockName, item.ticker, item.sourceTradeDate)
-    const saved = saveSnapshotWithOverwrite(item.form, analyze(item.form), label)
+    const saved = saveSnapshotWithOverwrite(item.form, analyze(item.form), label, item.sourceTradeDate)
     if (!saved) return
     const message = saved.overwritten
       ? `已覆盖同名快照：${saved.created.label}`
       : `已从历史记录添加快照：${saved.created.label}`
-    setHistoryMessage(message)
+    setHistorySnapshotFeedback({ id: item.id, message })
+    setHistoryMessage('')
     setSyncStatus(message)
     logger.info('snapshot added from history', { id: item.id, label: saved.created.label, overwritten: saved.overwritten })
   }
@@ -257,6 +291,7 @@ function App() {
           loadingTushare={loadingTushare}
           syncStatus={syncStatus}
           snapshotDraftName={snapshotDraftName}
+          snapshotDraftTags={snapshotDraftTags}
           snapshotMessage={snapshotMessage}
           currentSourceTradeDate={currentSourceTradeDate}
           activeStockName={activeStockName}
@@ -267,11 +302,13 @@ function App() {
           onUpdateField={updateField}
           onFetchTushare={(forceRefresh) => void handleFetchTushare(forceRefresh)}
           onSnapshotDraftNameChange={setSnapshotDraftName}
+          onSnapshotDraftTagsChange={setSnapshotDraftTags}
           onSaveSnapshot={handleSaveSnapshot}
         />
       ) : view === 'history' ? (
         <HistoryView
           historyMessage={historyMessage}
+          historySnapshotFeedback={historySnapshotFeedback}
           searchHistory={searchHistory}
           loadingTushare={loadingTushare}
           updatingHistoryId={updatingHistoryId}
@@ -291,6 +328,8 @@ function App() {
           attribution={attribution}
           backtestMax={backtestMax}
           attributionMax={attributionMax}
+          onAddSnapshotTags={addSnapshotTags}
+          onSetSnapshotTags={setSnapshotTags}
           onDeleteSnapshot={handleDeleteSnapshot}
           onCompareAIdChange={setCompareAId}
           onCompareBIdChange={setCompareBId}

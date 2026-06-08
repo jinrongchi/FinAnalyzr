@@ -7,7 +7,7 @@ type UseHistoryActionsOptions = {
     ticker: string
     stockName?: string
     sourceTradeDate?: string
-    fetchedAt?: string
+    createdAt?: string
     form: FormState
   }) => void
   removeHistoryEntry: (id: string) => void
@@ -18,7 +18,7 @@ type UseHistoryActionsOptions = {
           mergedForm: FormState
           stockName: string
           sourceTradeDate?: string
-          fetchedAt: string
+          createdAt?: string
           notes: string[]
         }
       }
@@ -41,12 +41,12 @@ export function useHistoryActions(options: UseHistoryActionsOptions) {
       return
     }
 
-    const { mergedForm, stockName, sourceTradeDate, fetchedAt } = synced.data
+    const { mergedForm, stockName, sourceTradeDate, createdAt } = synced.data
     options.saveHistoryEntry({
       ticker: mergedForm.ticker,
       stockName,
       sourceTradeDate,
-      fetchedAt,
+      createdAt,
       form: mergedForm,
     })
     options.setHistoryMessage(`已更新 ${stockName}，交易日 ${formatTradeDate(sourceTradeDate)}`)

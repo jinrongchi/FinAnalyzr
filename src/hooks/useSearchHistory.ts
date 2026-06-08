@@ -6,7 +6,7 @@ type SaveHistoryInput = {
   ticker: string
   stockName?: string
   sourceTradeDate?: string
-  fetchedAt?: string
+  createdAt?: string
   form: FormState
 }
 

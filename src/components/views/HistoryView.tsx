@@ -4,6 +4,7 @@ import type { SearchHistoryEntry } from '../../types'
 
 type HistoryViewProps = {
   historyMessage: string
+  historySnapshotFeedback: { id: string; message: string } | null
   searchHistory: SearchHistoryEntry[]
   loadingTushare: boolean
   updatingHistoryId: string
@@ -31,7 +32,7 @@ export function HistoryView(props: HistoryViewProps) {
                   </div>
                   <div>{item.ticker}</div>
                   <div>股票数据日：{formatTradeDate(item.sourceTradeDate)}</div>
-                  <div>查询时间：{new Date(item.fetchedAt).toLocaleString('zh-CN')}</div>
+                  <div>最后更新：{new Date(item.updatedAt).toLocaleString('zh-CN')}</div>
                 </div>
                 <div className="history-actions">
                   <button type="button" onClick={() => props.onSelectHistory(item)}>进入估值页</button>
@@ -52,6 +53,9 @@ export function HistoryView(props: HistoryViewProps) {
                   })()}
                   <button type="button" onClick={() => props.onAddSnapshotFromHistory(item)}>添加快照</button>
                   <button type="button" onClick={() => props.onRemoveHistory(item.id)}>删除</button>
+                  {props.historySnapshotFeedback?.id === item.id ? (
+                    <p className="history-inline-feedback">{props.historySnapshotFeedback.message}</p>
+                  ) : null}
                 </div>
               </div>
             ))}

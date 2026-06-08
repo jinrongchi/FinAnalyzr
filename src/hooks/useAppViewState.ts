@@ -5,12 +5,14 @@ export type AppView = 'analyzer' | 'history' | 'review'
 export function useAppViewState(onEnterAnalyzer: () => void) {
   const [view, setView] = useState<AppView>('analyzer')
   const [snapshotDraftName, setSnapshotDraftName] = useState('')
+  const [snapshotDraftTags, setSnapshotDraftTags] = useState('')
   const [snapshotMessage, setSnapshotMessage] = useState('')
   const [historyMessage, setHistoryMessage] = useState('')
 
   function resetForTickerChange(): void {
     setSnapshotMessage('')
     setSnapshotDraftName('')
+    setSnapshotDraftTags('')
   }
 
   function switchView(nextView: AppView): void {
@@ -20,6 +22,7 @@ export function useAppViewState(onEnterAnalyzer: () => void) {
     setView(nextView)
     setSnapshotMessage('')
     setSnapshotDraftName('')
+    setSnapshotDraftTags('')
     if (nextView !== 'history') {
       setHistoryMessage('')
     }
@@ -31,6 +34,8 @@ export function useAppViewState(onEnterAnalyzer: () => void) {
     switchView,
     snapshotDraftName,
     setSnapshotDraftName,
+    snapshotDraftTags,
+    setSnapshotDraftTags,
     snapshotMessage,
     setSnapshotMessage,
     historyMessage,

@@ -58,11 +58,12 @@ describe('App integration', () => {
   it('loads selected history entry into analyzer form', () => {
     const seededHistory = [
       {
-        id: '600519_2024-06-05',
+        id: '600519',
         ticker: '600519',
         stockName: '贵州茅台',
         sourceTradeDate: '20240605',
-        fetchedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         form: {
           ...DEFAULT_FORM,
           ticker: '600519',
@@ -102,11 +103,12 @@ describe('App integration', () => {
   it('shows error message when history refresh fails', async () => {
     const seededHistory = [
       {
-        id: '000001_2024-01-01',
+        id: '000001',
         ticker: '000001',
         stockName: '平安银行',
         sourceTradeDate: '20240101',
-        fetchedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         form: {
           ...DEFAULT_FORM,
           ticker: '000001',

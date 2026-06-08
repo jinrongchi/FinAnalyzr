@@ -9,7 +9,7 @@ type SyncResult = {
   mergedForm: FormState
   stockName: string
   sourceTradeDate?: string
-  fetchedAt: string
+  createdAt?: string
   notes: string[]
 }
 
@@ -110,7 +110,6 @@ export function useTushareSync() {
           mergedForm,
           stockName,
           sourceTradeDate: loaded.sourceTradeDate,
-          fetchedAt: loaded.fetchedAt,
           notes: loaded.notes,
         },
       }
@@ -145,7 +144,7 @@ export function useTushareSync() {
           mergedForm,
           stockName,
           sourceTradeDate: loaded.sourceTradeDate,
-          fetchedAt: loaded.fetchedAt,
+          createdAt: item.createdAt,
           notes: loaded.notes,
         },
       }
