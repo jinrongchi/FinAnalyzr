@@ -138,7 +138,7 @@ describe('App integration', () => {
     render(<App />)
 
     expect(await screen.findByText('the token is already set from server side')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Load from TuShare' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '加载 TuShare' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Set Token' }))
     fireEvent.change(screen.getByPlaceholderText('输入 TuShare Token'), {
@@ -153,7 +153,7 @@ describe('App integration', () => {
   it('keeps load button disabled until token is saved', () => {
     render(<App />)
 
-    const loadButton = screen.getByRole('button', { name: 'Load from TuShare' })
+    const loadButton = screen.getByRole('button', { name: '加载 TuShare' })
     expect(loadButton).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Set Token' }))
@@ -163,7 +163,7 @@ describe('App integration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Token' }))
 
     expect(screen.getAllByText('Token Saved').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Load from TuShare' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '加载 TuShare' })).toBeEnabled()
   })
 
   it('remembers TuShare token across app remounts', () => {
@@ -194,11 +194,11 @@ describe('App integration', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save Token' }))
 
-    expect(screen.getByRole('button', { name: 'Load from TuShare' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '加载 TuShare' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear Token' }))
 
     expect(screen.getByRole('button', { name: 'Set Token' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Load from TuShare' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '加载 TuShare' })).toBeDisabled()
   })
 })

@@ -17,7 +17,7 @@ import { analyze, grade } from './lib/valuation'
 import type { SearchHistoryEntry } from './types'
 
 function App() {
-  const [historySnapshotFeedback, setHistorySnapshotFeedback] = useState<{ id: string; message: string } | null>(null)
+  const [historyItemFeedback, setHistoryItemFeedback] = useState<{ id: string; message: string; tone: 'success' | 'error' | 'info' } | null>(null)
 
   const {
     searchHistory,
@@ -103,13 +103,14 @@ function App() {
     setSnapshotDraftName,
     setSnapshotMessage,
     setHistoryMessage,
+    setHistoryItemFeedback,
     setSyncStatus,
     setView,
   })
 
   useEffect(() => {
     if (view !== 'history') {
-      setHistorySnapshotFeedback(null)
+      setHistoryItemFeedback(null)
     }
   }, [view])
 
@@ -197,7 +198,7 @@ function App() {
     const message = saved.overwritten
       ? `已覆盖同名快照：${saved.created.label}`
       : `已从历史记录添加快照：${saved.created.label}`
-    setHistorySnapshotFeedback({ id: item.id, message })
+    setHistoryItemFeedback({ id: item.id, message, tone: 'success' })
     setHistoryMessage('')
     setSyncStatus(message)
     logger.info('snapshot added from history', { id: item.id, label: saved.created.label, overwritten: saved.overwritten })
@@ -308,7 +309,7 @@ function App() {
       ) : view === 'history' ? (
         <HistoryView
           historyMessage={historyMessage}
-          historySnapshotFeedback={historySnapshotFeedback}
+          historyItemFeedback={historyItemFeedback}
           searchHistory={searchHistory}
           loadingTushare={loadingTushare}
           updatingHistoryId={updatingHistoryId}

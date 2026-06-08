@@ -39,15 +39,17 @@ export function AnalyzerView(props: AnalyzerViewProps) {
             <input name="ticker" value={props.form.ticker} onChange={props.onInputChange} />
           </label>
           <NumberField label="当前股价（元）" name="price" step={0.01} value={props.form.price} emptyIfZero onChange={props.onUpdateField} />
-          <button
-            type="button"
-            className={!props.canUseTushare ? 'muted-action' : ''}
-            disabled={props.loadingTushare || !props.canUseTushare}
-            title={!props.canUseTushare ? '请先保存 TuShare Token' : ''}
-            onClick={() => props.onFetchTushare(false)}
-          >
-            {props.loadingTushare ? '同步中...' : 'Load from TuShare'}
-          </button>
+          <div className="primary-action-cell">
+            <button
+              type="button"
+              className={!props.canUseTushare ? 'muted-action tushare-load-btn' : 'tushare-load-btn'}
+              disabled={props.loadingTushare || !props.canUseTushare}
+              title={!props.canUseTushare ? '请先保存 TuShare Token' : ''}
+              onClick={() => props.onFetchTushare(false)}
+            >
+              {props.loadingTushare ? '同步中...' : '加载 TuShare'}
+            </button>
+          </div>
         </div>
 
         {props.syncStatus ? <p className="status-note">{props.syncStatus}</p> : null}
@@ -106,7 +108,7 @@ export function AnalyzerView(props: AnalyzerViewProps) {
             <input
               value={props.snapshotDraftTags}
               onChange={(e) => props.onSnapshotDraftTagsChange(e.target.value)}
-              placeholder="例如：白马, 半导体, 低估"
+              placeholder="例如：茅台, 三季度, 符合预期"
             />
           </label>
           <button type="button" onClick={props.onSaveSnapshot}>保存当前快照</button>

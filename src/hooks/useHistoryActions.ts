@@ -29,6 +29,7 @@ type UseHistoryActionsOptions = {
   setSnapshotDraftName: (value: string) => void
   setSnapshotMessage: (value: string) => void
   setHistoryMessage: (value: string) => void
+  setHistoryItemFeedback: (value: { id: string; message: string; tone: 'success' | 'error' | 'info' } | null) => void
   setSyncStatus: (value: string) => void
   setView: (view: 'analyzer' | 'history' | 'review') => void
 }
@@ -37,6 +38,7 @@ export function useHistoryActions(options: UseHistoryActionsOptions) {
   async function handleRefreshHistoryItem(item: SearchHistoryEntry): Promise<void> {
     const synced = await options.syncHistoryItem(item)
     if (!synced.ok) {
+      options.setHistoryItemFeedback({ id: item.id, message: `更新失败：${synced.error}`, tone: 'error' })
       options.setHistoryMessage(`历史数据更新失败：${synced.error}`)
       return
     }
@@ -49,7 +51,9 @@ export function useHistoryActions(options: UseHistoryActionsOptions) {
       createdAt,
       form: mergedForm,
     })
-    options.setHistoryMessage(`已更新 ${stockName}，交易日 ${formatTradeDate(sourceTradeDate)}`)
+    const message = `已更新 ${stockName}，交易日 ${formatTradeDate(sourceTradeDate)}`
+    options.setHistoryItemFeedback({ id: item.id, message, tone: 'success' })
+    options.setHistoryMessage('')
   }
 
   function handleSelectHistory(item: SearchHistoryEntry): void {
