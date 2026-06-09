@@ -1,9 +1,10 @@
 import type { ChangeEvent } from 'react'
+import { useState } from 'react'
 import { NumberField } from '../NumberField'
 import { formatMaybePct, formatMaybeYuan } from '../../lib/displayFormat'
 import { buildSnapshotName } from '../../lib/historyDate'
 import { formatPct } from '../../lib/valuation'
-import type { AnalysisResult, FormState } from '../../types'
+import type { AnalysisResult, FieldNotes, FieldSources, FormState, ModelResult } from '../../types'
 
 type AnalyzerViewProps = {
   form: FormState
@@ -18,6 +19,8 @@ type AnalyzerViewProps = {
   result: AnalysisResult
   finalGrade: { cls: string; label: string }
   sensitivityMax: number
+  fieldSources: FieldSources
+  fieldNotes: FieldNotes
   onInputChange: (event: ChangeEvent<HTMLInputElement>) => void
   onUpdateField: (name: keyof FormState, value: string) => void
   onFetchTushare: (forceRefresh?: boolean) => void
@@ -26,145 +29,419 @@ type AnalyzerViewProps = {
   onSaveSnapshot: () => void
 }
 
-export function AnalyzerView(props: AnalyzerViewProps) {
-  return (
-    <main className="layout">
-      <section className="panel input-panel">
-        <h2>输入参数</h2>
-        <p className="sub">支持 TuShare 一键加载与手工补录。</p>
+type AnalyzerTab = 'dcf' | 'roepb' | 'relative' | 'cashflow' | 'sotp' | 'risk'
 
-        <div className="form-grid primary-grid">
+function completenessCount(form: FormState): { filled: number; total: number } {
+  const numericKeys = Object.keys(form).filter((k) => k !== 'ticker') as Array<keyof FormState>
+  const filled = numericKeys.filter((k) => {
+    const v = form[k]
+    return typeof v === 'number' ? v !== 0 : Boolean(v)
+  }).length
+  return { filled, total: numericKeys.length }
+}
+
+function Section({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="section-block">
+      <button
+        type="button"
+        className="section-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span>{title}</span>
+        <span className="section-arrow">{open ? '▲' : '▼'}</span>
+      </button>
+      {open ? <div className="section-content">{children}</div> : null}
+    </div>
+  )
+}
+
+function marginSafetyClass(m: number): string {
+  if (m >= 0.3) return 'ms-great'
+  if (m >= 0.1) return 'ms-good'
+  if (m >= 0) return 'ms-neutral'
+  return 'ms-bad'
+}
+
+function modelByKey(result: AnalysisResult, key: ModelResult['key']): ModelResult | undefined {
+  return result.models.find((m) => m.key === key)
+}
+
+function ModelBox({ model }: { model?: ModelResult }) {
+  if (!model) return null
+  return (
+    <div className={`system-result-card ${model.valid ? '' : 'card-inactive'}`}>
+      <div className="row">
+        <strong>{model.name}</strong>
+        <span className="tag">{model.valid ? `置信度 ${formatPct(model.confidence || 0)}` : '未采用'}</span>
+      </div>
+      {model.valid ? (
+        <>
+          <div className="system-result-value">{formatMaybeYuan(model.value || 0)}</div>
+          {model.weight !== undefined ? (
+            <div className="system-result-meta">权重 {(model.weight * 100).toFixed(0)}% · 贡献 {formatMaybeYuan(model.contribution || 0)}</div>
+          ) : null}
+          <div className="card-assumptions">{model.assumptions}</div>
+        </>
+      ) : <div className="card-reason">{model.reason}</div>}
+    </div>
+  )
+}
+
+export function AnalyzerView(props: AnalyzerViewProps) {
+  const [activeTab, setActiveTab] = useState<AnalyzerTab>('dcf')
+  const { filled, total } = completenessCount(props.form)
+  const completeness = Math.round((filled / total) * 100)
+  const { fs } = { fs: props.fieldSources }
+  const { fn } = { fn: props.fieldNotes }
+  const sotpSegmentSum =
+    props.form.sotpSegmentCorePerShare
+    + props.form.sotpSegmentGrowthPerShare
+    + props.form.sotpSegmentInvestmentPerShare
+    + props.form.sotpSegmentNetCashPerShare
+
+  const capeNote = props.fieldNotes.cape || ''
+  const capeMethod = (() => {
+    if (props.fieldSources.cape === 'manual') return '手工输入'
+    if (capeNote.includes('CPI不可用')) return '名义利润(降级)'
+    if (capeNote.includes('CPI均值')) return '通胀调整'
+    if (props.form.cape > 0) return '已提供'
+    return undefined
+  })()
+
+  const dcfModel = modelByKey(props.result, 'DCF')
+  const roepbModel = modelByKey(props.result, 'ROEPB')
+  const relModel = modelByKey(props.result, 'REL')
+  const grhModel = modelByKey(props.result, 'GRH')
+  const capeModel = modelByKey(props.result, 'CAPE')
+  const fcfevModel = modelByKey(props.result, 'FCFEV')
+  const sotpModel = modelByKey(props.result, 'SOTP')
+
+  function helperFor(field: keyof FormState): string | undefined {
+    if (field === 'industryPE' || field === 'industryPB') return undefined
+    return fn[field]
+  }
+
+  function formulaFor(field: keyof FormState): string | undefined {
+    switch (field) {
+      case 'discountRate':
+        return 'CAPM: r = Rf + beta × ERP；当前默认 Rf=2.5%, ERP=6.5%'
+      case 'netDebt':
+        return '净负债 = 流动负债 + 非流动负债 - 货币资金（再换算为亿元）'
+      case 'deRatio':
+        return 'D/E = 资产负债率 / (1 - 资产负债率)'
+      case 'ebitdaPerShare':
+        return '每股EBITDA = EBITDA(万元) / 总股本(万股)；若缺失则按股价×15%近似'
+      case 'fcfGrowth':
+        return 'FCF增长率 = (本期FCF - 上期FCF) / 上期FCF × 100%'
+      case 'fcfConversion':
+        return 'FCF 转化率 = 自由现金流 / 归母净利润 × 100%'
+      case 'dividendGrowth':
+        return 'g1 = ROE × (1 - 股息支付率)，其中 ROE = EPS/BVPS，股息支付率 = D0/EPS'
+      case 'terminalGrowth':
+        return '永续增长率 g 默认 3%，代表长期名义增长中枢'
+      case 'moatScore':
+        return '护城河评分按 ROIC 分段启发式推导：>=25→80，>=20→65，>=15→50，>=10→35，否则20'
+      case 'governanceScore':
+        return '治理评分默认值=60（中性基线），建议按治理结构与信披质量人工修正'
+      case 'industryOverride':
+        return '行业模板：0自动识别，1金融地产，2消费医药，3强周期，4重资产基建，5科技平台'
+      case 'sotpPerShare':
+        return 'SOTP每股估值：建议按分部价值加总后折算为每股'
+      case 'sotpSegmentCorePerShare':
+        return '核心业务分部每股估值'
+      case 'sotpSegmentGrowthPerShare':
+        return '成长/新业务分部每股估值'
+      case 'sotpSegmentInvestmentPerShare':
+        return '股权投资及其他资产每股估值'
+      case 'sotpSegmentNetCashPerShare':
+        return '净现金（净负债为负值）折算每股价值'
+      case 'rndCapitalizationAdjPerShare':
+        return '研发资本化调整：将研发费用资本化后对每股价值的调整额'
+      case 'csi300EarningsYield':
+        return '股债利差温度计中的 E/P，优先用沪深300盈利收益率'
+      case 'cn10yYield':
+        return '10年期国债收益率，默认2.5%'
+      case 'pePercentile10y':
+      case 'pbPercentile10y':
+      case 'pcfPercentile10y':
+        return '该指标当前值在过去10年分布中的百分位（0-100）'
+      case 'pePercentile5y':
+      case 'pbPercentile5y':
+      case 'pcfPercentile5y':
+        return '该指标当前值在过去5年分布中的百分位（0-100）'
+      case 'peg':
+        return 'PEG=PE/盈利增长率，通常 PEG<1 代表估值与增长更匹配'
+      case 'pcf':
+        return 'PCF（市现率）越低通常越便宜，建议结合现金流质量判断'
+      case 'ocfToNi3yAvg':
+        return '近3年经营性现金流/净利润均值，低于0.7触发红旗'
+      case 'goodwillToEquity':
+        return '商誉/净资产比例，超过30%触发红旗'
+      case 'otherReceivablesToEquity':
+        return '其他应收款/净资产比例，超过20%触发红旗'
+      case 'inventoryTurnoverTrend':
+      case 'arTurnoverTrend':
+        return '最近三期相对最早一期的周转率变化（%），双双明显下降触发红旗'
+      default:
+        return undefined
+    }
+  }
+
+  return (
+    <main className="layout analyzer-redesign-layout">
+      <section className="panel analyzer-shell">
+        <div className="analyzer-top-head">
+          <div>
+            <h2>{props.activeStockName || '估值总览'}</h2>
+            <h3 className="analyzer-legacy-title">输入参数</h3>
+            <p className="sub">先看总报告，再按估值系统逐项填参与校验。</p>
+          </div>
+          <div className="completeness-wrap">
+            <div className="completeness-label">数据完整度 {completeness}%</div>
+            <div className="completeness-track">
+              <div
+                className="completeness-fill"
+                style={{ width: `${completeness}%`, background: completeness >= 80 ? '#16a34a' : completeness >= 50 ? '#d97706' : '#dc2626' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="analyzer-top-controls">
           <label>
             股票代码
-            <input name="ticker" value={props.form.ticker} onChange={props.onInputChange} />
+            <input name="ticker" value={props.form.ticker} placeholder="例如 600519" onChange={props.onInputChange} />
           </label>
-          <NumberField label="当前股价（元）" name="price" step={0.01} value={props.form.price} emptyIfZero onChange={props.onUpdateField} />
-          <div className="primary-action-cell">
-            <button
-              type="button"
-              className={!props.canUseTushare ? 'muted-action tushare-load-btn' : 'tushare-load-btn'}
-              disabled={props.loadingTushare || !props.canUseTushare}
-              title={!props.canUseTushare ? '请先保存 TuShare Token' : ''}
-              onClick={() => props.onFetchTushare(false)}
-            >
-              {props.loadingTushare ? '同步中...' : '加载 TuShare'}
-            </button>
-          </div>
+          <NumberField label="当前股价（元）" name="price" step={0.01} value={props.form.price} emptyIfZero source={fs.price} onChange={props.onUpdateField} />
+          <button
+            type="button"
+            className={!props.canUseTushare ? 'muted-action tushare-load-btn' : 'tushare-load-btn'}
+            disabled={props.loadingTushare || !props.canUseTushare}
+            title={!props.canUseTushare ? '请先保存 TuShare Token' : ''}
+            onClick={() => props.onFetchTushare(false)}
+          >
+            {props.loadingTushare ? '同步中...' : '加载 TuShare'}
+          </button>
         </div>
 
         {props.syncStatus ? <p className="status-note">{props.syncStatus}</p> : null}
 
-        <h3>DCF 参数</h3>
-        <div className="form-grid">
-          <NumberField label="基准自由现金流 FCF0（亿元）" name="fcf0" value={props.form.fcf0} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="预测年数" name="forecastYears" min={3} max={20} step={1} value={props.form.forecastYears} onChange={props.onUpdateField} />
-          <NumberField label="FCF 增长率（%）" name="fcfGrowth" value={props.form.fcfGrowth} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="折现率 r（%）" name="discountRate" value={props.form.discountRate} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="永续增长率 g（%）" name="terminalGrowth" value={props.form.terminalGrowth} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="净负债（亿元，净现金填负）" name="netDebt" value={props.form.netDebt} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="总股本（亿股）" name="sharesOutstanding" value={props.form.sharesOutstanding} emptyIfZero onChange={props.onUpdateField} />
-        </div>
-
-        <h3>相对估值参数</h3>
-        <div className="form-grid">
-          <NumberField label="每股收益 EPS（元）" name="eps" value={props.form.eps} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="每股净资产 BVPS（元）" name="bvps" value={props.form.bvps} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="每股 EBITDA（元）" name="ebitdaPerShare" value={props.form.ebitdaPerShare} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="行业中位 PE" name="industryPE" value={props.form.industryPE} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="行业中位 PB" name="industryPB" value={props.form.industryPB} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="行业中位 EV/EBITDA" name="industryEVEBITDA" value={props.form.industryEVEBITDA} emptyIfZero onChange={props.onUpdateField} />
-        </div>
-
-        <h3>DDM 参数</h3>
-        <div className="form-grid">
-          <NumberField label="每股分红 D0（元）" name="dividend0" value={props.form.dividend0} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="阶段增长率 g1（%）" name="dividendGrowth" value={props.form.dividendGrowth} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="阶段年数" name="ddmYears" min={1} max={20} step={1} value={props.form.ddmYears} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="必要回报率 k（%）" name="requiredReturn" value={props.form.requiredReturn} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="稳定增长率 g2（%）" name="stableGrowth" value={props.form.stableGrowth} emptyIfZero onChange={props.onUpdateField} />
-        </div>
-
-        <h3>质量评分（0-100）</h3>
-        <div className="form-grid">
-          <NumberField label="ROIC（%）" name="roic" value={props.form.roic} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="资产负债率替代：D/E" name="deRatio" value={props.form.deRatio} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="FCF 转化率（%）" name="fcfConversion" value={props.form.fcfConversion} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="治理评分" name="governanceScore" min={0} max={100} step={1} value={props.form.governanceScore} emptyIfZero onChange={props.onUpdateField} />
-          <NumberField label="护城河评分" name="moatScore" min={0} max={100} step={1} value={props.form.moatScore} emptyIfZero onChange={props.onUpdateField} />
-        </div>
-
-        <h3>快照</h3>
-        <div className="form-grid snapshot-grid">
-          <label>
-            快照名称
-            <input
-              value={props.snapshotDraftName}
-              onChange={(e) => props.onSnapshotDraftNameChange(e.target.value)}
-              placeholder={buildSnapshotName(props.activeStockName, props.form.ticker, props.currentSourceTradeDate)}
-            />
-          </label>
-          <label>
-            快照标签（逗号分隔）
-            <input
-              value={props.snapshotDraftTags}
-              onChange={(e) => props.onSnapshotDraftTagsChange(e.target.value)}
-              placeholder="例如：茅台, 三季度, 符合预期"
-            />
-          </label>
-          <button type="button" onClick={props.onSaveSnapshot}>保存当前快照</button>
-        </div>
-        {props.snapshotMessage ? <p className="snapshot-note">{props.snapshotMessage}</p> : null}
-      </section>
-
-      <section className="panel result-panel">
-        <h2>评估结果</h2>
         <div className="overview">
           <div className="row">
-            <strong>{props.activeStockName}</strong>
+            <strong>总评估报告</strong>
             <span className={`tag ${props.finalGrade.cls}`}>{props.finalGrade.label}</span>
           </div>
+          {props.result.industryProfile ? <p className="sub">行业模板：{props.result.industryProfile}</p> : null}
           <div className="kpi">
             <div className="item"><div>当前价格</div><div className="v">{formatMaybeYuan(props.form.price)}</div></div>
             <div className="item"><div>内在价值</div><div className="v">{formatMaybeYuan(props.result.intrinsicValue)}</div></div>
-            <div className="item"><div>安全边际</div><div className="v">{formatMaybePct(props.result.marginSafety)}</div></div>
-            <div className="item"><div>质量评分</div><div className="v">{props.result.qualityScore}</div></div>
+            <div className="item"><div>价值区间</div><div className="v">{props.result.intrinsicRange ? `${formatMaybeYuan(props.result.intrinsicRange.bear)} - ${formatMaybeYuan(props.result.intrinsicRange.bull)}` : '-'}</div></div>
+            <div className={`item ${marginSafetyClass(props.result.marginSafety)}`}><div>安全边际</div><div className="v">{formatMaybePct(props.result.marginSafety)}</div></div>
             <div className="item"><div>结果置信度</div><div className="v">{formatPct(props.result.confidence)}</div></div>
+            <div className="item"><div>质量评分</div><div className="v">{props.result.qualityScore}</div></div>
+            {props.result.safetyScore !== undefined ? <div className="item"><div>安全边际评分</div><div className="v">{props.result.safetyScore}</div></div> : null}
+            {props.result.dataCoverage ? <div className="item"><div>数据充分度</div><div className="v">{props.result.dataCoverage.score} ({props.result.dataCoverage.level === 'high' ? '高' : props.result.dataCoverage.level === 'medium' ? '中' : '低'})</div></div> : null}
+            {capeMethod ? <div className="item" title={capeNote || 'CAPE 数据口径'}><div>CAPE口径</div><div className="v">{capeMethod}</div></div> : null}
           </div>
         </div>
 
-        <div className="cards">
-          {props.result.models.map((m) => (
-            <div className="card" key={m.key}>
-              <div className="row">
-                <strong>{m.name}</strong>
-                <span className="tag">{m.valid ? `置信度 ${formatPct(m.confidence || 0)}` : '未采用'}</span>
+        <div className="system-tabs" role="tablist" aria-label="估值系统切换">
+          <button type="button" className={`system-tab-btn ${activeTab === 'dcf' ? 'is-active' : ''}`} onClick={() => setActiveTab('dcf')}>DCF系统</button>
+          <button type="button" className={`system-tab-btn ${activeTab === 'roepb' ? 'is-active' : ''}`} onClick={() => setActiveTab('roepb')}>ROE-PB系统</button>
+          <button type="button" className={`system-tab-btn ${activeTab === 'relative' ? 'is-active' : ''}`} onClick={() => setActiveTab('relative')}>相对估值系统</button>
+          <button type="button" className={`system-tab-btn ${activeTab === 'cashflow' ? 'is-active' : ''}`} onClick={() => setActiveTab('cashflow')}>CAPE/现金回报</button>
+          <button type="button" className={`system-tab-btn ${activeTab === 'sotp' ? 'is-active' : ''}`} onClick={() => setActiveTab('sotp')}>SOTP系统</button>
+          <button type="button" className={`system-tab-btn ${activeTab === 'risk' ? 'is-active' : ''}`} onClick={() => setActiveTab('risk')}>风险与验证</button>
+        </div>
+
+        <div className="system-panel">
+          {activeTab === 'dcf' ? (
+            <div className="system-grid">
+              <div>
+                <h3>DCF 输入参数</h3>
+                <div className="form-grid">
+                  <NumberField label="基准自由现金流 FCF0（亿元）" name="fcf0" value={props.form.fcf0} emptyIfZero source={fs.fcf0} helperText={helperFor('fcf0')} helperFormula={formulaFor('fcf0')} onChange={props.onUpdateField} />
+                  <NumberField label="预测年数" name="forecastYears" min={3} max={20} step={1} value={props.form.forecastYears} onChange={props.onUpdateField} />
+                  <NumberField label="FCF 增长率（%）" name="fcfGrowth" value={props.form.fcfGrowth} emptyIfZero source={fs.fcfGrowth} helperText={helperFor('fcfGrowth')} helperFormula={formulaFor('fcfGrowth')} onChange={props.onUpdateField} />
+                  <NumberField label="折现率 r（%）" name="discountRate" value={props.form.discountRate} emptyIfZero source={fs.discountRate} helperText={helperFor('discountRate')} helperFormula={formulaFor('discountRate')} onChange={props.onUpdateField} />
+                  <NumberField label="永续增长率 g（%）" name="terminalGrowth" value={props.form.terminalGrowth} emptyIfZero source={fs.terminalGrowth} helperText={helperFor('terminalGrowth')} helperFormula={formulaFor('terminalGrowth')} onChange={props.onUpdateField} />
+                  <NumberField label="净负债（亿元，净现金填负）" name="netDebt" value={props.form.netDebt} emptyIfZero source={fs.netDebt} helperText={helperFor('netDebt')} helperFormula={formulaFor('netDebt')} onChange={props.onUpdateField} />
+                  <NumberField label="总股本（亿股）" name="sharesOutstanding" value={props.form.sharesOutstanding} emptyIfZero source={fs.sharesOutstanding} helperText={helperFor('sharesOutstanding')} helperFormula={formulaFor('sharesOutstanding')} onChange={props.onUpdateField} />
+                </div>
               </div>
-              {m.valid ? (
-                <>
-                  <div>估值：<strong>{formatMaybeYuan(m.value || 0)}</strong></div>
-                  <div>假设：{m.assumptions}</div>
-                </>
-              ) : (
-                <div>{m.reason}</div>
-              )}
+              <div>
+                <ModelBox model={dcfModel} />
+                <div className="sensitivity">
+                  <h3>DCF 敏感性分析</h3>
+                  {props.result.sensitivity.length ? props.result.sensitivity.map((s) => (
+                    <div className="bar" key={s.label}>
+                      <div className="bar-label">{s.label}</div>
+                      <div className="track"><div className="fill" style={{ width: `${props.sensitivityMax > 0 ? (s.value / props.sensitivityMax) * 100 : 0}%` }} /></div>
+                      <div className="bar-value">{formatMaybeYuan(s.value)}</div>
+                    </div>
+                  )) : <p>DCF 不可用，无法生成敏感性分析。</p>}
+                </div>
+              </div>
             </div>
-          ))}
+          ) : null}
+
+          {activeTab === 'roepb' ? (
+            <div className="system-grid">
+              <div>
+                <h3>ROE-PB 输入参数</h3>
+                <div className="form-grid">
+                  <NumberField label="每股收益 EPS（元）" name="eps" value={props.form.eps} emptyIfZero source={fs.eps} helperText={helperFor('eps')} helperFormula={formulaFor('eps')} onChange={props.onUpdateField} />
+                  <NumberField label="每股净资产 BVPS（元）" name="bvps" value={props.form.bvps} emptyIfZero source={fs.bvps} helperText={helperFor('bvps')} helperFormula={formulaFor('bvps')} onChange={props.onUpdateField} />
+                  <NumberField label="折现率 r（%）" name="discountRate" value={props.form.discountRate} emptyIfZero source={fs.discountRate} helperText={helperFor('discountRate')} helperFormula={formulaFor('discountRate')} onChange={props.onUpdateField} />
+                  <NumberField label="永续增长率 g（%）" name="terminalGrowth" value={props.form.terminalGrowth} emptyIfZero source={fs.terminalGrowth} helperText={helperFor('terminalGrowth')} helperFormula={formulaFor('terminalGrowth')} onChange={props.onUpdateField} />
+                  <NumberField label="行业中位 PB" name="industryPB" value={props.form.industryPB} emptyIfZero source={fs.industryPB} helperText={helperFor('industryPB')} helperFormula={formulaFor('industryPB')} onChange={props.onUpdateField} />
+                </div>
+              </div>
+              <div><ModelBox model={roepbModel} /></div>
+            </div>
+          ) : null}
+
+          {activeTab === 'relative' ? (
+            <div className="system-grid">
+              <div>
+                <h3>相对估值输入参数（PE/PB/PCF/PEG）</h3>
+                <div className="form-grid">
+                  <NumberField label="每股收益 EPS（元）" name="eps" value={props.form.eps} emptyIfZero source={fs.eps} helperText={helperFor('eps')} helperFormula={formulaFor('eps')} onChange={props.onUpdateField} />
+                  <NumberField label="每股净资产 BVPS（元）" name="bvps" value={props.form.bvps} emptyIfZero source={fs.bvps} helperText={helperFor('bvps')} helperFormula={formulaFor('bvps')} onChange={props.onUpdateField} />
+                  <NumberField label="行业中位 PE" name="industryPE" value={props.form.industryPE} emptyIfZero source={fs.industryPE} helperText={helperFor('industryPE')} helperFormula={formulaFor('industryPE')} onChange={props.onUpdateField} />
+                  <NumberField label="行业中位 PB" name="industryPB" value={props.form.industryPB} emptyIfZero source={fs.industryPB} helperText={helperFor('industryPB')} helperFormula={formulaFor('industryPB')} onChange={props.onUpdateField} />
+                  <NumberField label="当前 PCF（TTM）" name="pcf" value={props.form.pcf} emptyIfZero source={fs.pcf} helperText={helperFor('pcf')} helperFormula={formulaFor('pcf')} onChange={props.onUpdateField} />
+                  <NumberField label="PEG" name="peg" step={0.01} value={props.form.peg} emptyIfZero source={fs.peg} helperText={helperFor('peg')} helperFormula={formulaFor('peg')} onChange={props.onUpdateField} />
+                </div>
+              </div>
+              <div>
+                <ModelBox model={relModel} />
+                {props.result.percentileCloud?.length ? (
+                  <div className="sensitivity">
+                    <h3>历史分位云图（5Y / 10Y）</h3>
+                    {props.result.percentileCloud.map((p) => (
+                      <div className="bar" key={p.metric}>
+                        <div className="bar-label">{p.metric}</div>
+                        <div className="track"><div className="fill" style={{ width: `${Math.max(0, Math.min(100, p.percentile10y))}%` }} /></div>
+                        <div className="bar-value">{(p.percentile5y ?? 0).toFixed(1)}% / {p.percentile10y.toFixed(1)}%</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === 'cashflow' ? (
+            <div className="system-grid">
+              <div>
+                <h3>CAPE 与现金回报输入参数</h3>
+                <div className="form-grid">
+                  <NumberField label="CAPE" name="cape" value={props.form.cape} emptyIfZero source={fs.cape} helperText={helperFor('cape')} helperFormula={formulaFor('cape')} onChange={props.onUpdateField} />
+                  <NumberField label="FCF/EV 回报率（%）" name="fcfYield" step={0.01} value={props.form.fcfYield} emptyIfZero source={fs.fcfYield} helperText={helperFor('fcfYield')} helperFormula={formulaFor('fcfYield')} onChange={props.onUpdateField} />
+                  <NumberField label="每股分红 D0（元）" name="dividend0" value={props.form.dividend0} emptyIfZero source={fs.dividend0} helperText={helperFor('dividend0')} helperFormula={formulaFor('dividend0')} onChange={props.onUpdateField} />
+                  <NumberField label="阶段增长率 g1（%）" name="dividendGrowth" value={props.form.dividendGrowth} emptyIfZero source={fs.dividendGrowth} helperText={helperFor('dividendGrowth')} helperFormula={formulaFor('dividendGrowth')} onChange={props.onUpdateField} />
+                </div>
+              </div>
+              <div className="system-results-stack">
+                <ModelBox model={capeModel} />
+                <ModelBox model={fcfevModel} />
+                <ModelBox model={grhModel} />
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === 'sotp' ? (
+            <div className="system-grid">
+              <div>
+                <h3>SOTP 输入参数</h3>
+                <div className="form-grid">
+                  <label>
+                    行业模板
+                    <select value={String(props.form.industryOverride)} onChange={(e) => props.onUpdateField('industryOverride', e.target.value)}>
+                      <option value="0">自动识别</option>
+                      <option value="1">金融/地产</option>
+                      <option value="2">消费/医药</option>
+                      <option value="3">强周期（钢铁/化工等）</option>
+                      <option value="4">重资产基建（水电/高速等）</option>
+                      <option value="5">科技/平台</option>
+                    </select>
+                    <small className="field-note">{formulaFor('industryOverride')}</small>
+                  </label>
+                  <NumberField label="SOTP每股估值（元）" name="sotpPerShare" step={0.01} value={props.form.sotpPerShare} emptyIfZero source={fs.sotpPerShare} helperFormula={formulaFor('sotpPerShare')} onChange={props.onUpdateField} />
+                  <NumberField label="分部-核心业务（元/股）" name="sotpSegmentCorePerShare" step={0.01} value={props.form.sotpSegmentCorePerShare} emptyIfZero source={fs.sotpSegmentCorePerShare} helperFormula={formulaFor('sotpSegmentCorePerShare')} onChange={props.onUpdateField} />
+                  <NumberField label="分部-成长业务（元/股）" name="sotpSegmentGrowthPerShare" step={0.01} value={props.form.sotpSegmentGrowthPerShare} emptyIfZero source={fs.sotpSegmentGrowthPerShare} helperFormula={formulaFor('sotpSegmentGrowthPerShare')} onChange={props.onUpdateField} />
+                  <NumberField label="分部-投资资产（元/股）" name="sotpSegmentInvestmentPerShare" step={0.01} value={props.form.sotpSegmentInvestmentPerShare} emptyIfZero source={fs.sotpSegmentInvestmentPerShare} helperFormula={formulaFor('sotpSegmentInvestmentPerShare')} onChange={props.onUpdateField} />
+                  <NumberField label="分部-净现金（元/股）" name="sotpSegmentNetCashPerShare" step={0.01} value={props.form.sotpSegmentNetCashPerShare} emptyIfZero source={fs.sotpSegmentNetCashPerShare} helperFormula={formulaFor('sotpSegmentNetCashPerShare')} onChange={props.onUpdateField} />
+                  <NumberField label="研发资本化调整（元/股）" name="rndCapitalizationAdjPerShare" step={0.01} value={props.form.rndCapitalizationAdjPerShare} emptyIfZero source={fs.rndCapitalizationAdjPerShare} helperFormula={formulaFor('rndCapitalizationAdjPerShare')} onChange={props.onUpdateField} />
+                </div>
+                <p className="sub">分部汇总（不含研发资本化调整）：{formatMaybeYuan(sotpSegmentSum)}</p>
+              </div>
+              <div><ModelBox model={sotpModel} /></div>
+            </div>
+          ) : null}
+
+          {activeTab === 'risk' ? (
+            <div className="system-grid">
+              <div>
+                <h3>风险过滤与验证参数</h3>
+                <div className="form-grid">
+                  <NumberField label="近3年OCF/NI均值" name="ocfToNi3yAvg" step={0.01} value={props.form.ocfToNi3yAvg} emptyIfZero source={fs.ocfToNi3yAvg} helperFormula={formulaFor('ocfToNi3yAvg')} onChange={props.onUpdateField} />
+                  <NumberField label="商誉/净资产（%）" name="goodwillToEquity" step={0.1} value={props.form.goodwillToEquity} emptyIfZero source={fs.goodwillToEquity} helperFormula={formulaFor('goodwillToEquity')} onChange={props.onUpdateField} />
+                  <NumberField label="其他应收款/净资产（%）" name="otherReceivablesToEquity" step={0.1} value={props.form.otherReceivablesToEquity} emptyIfZero source={fs.otherReceivablesToEquity} helperFormula={formulaFor('otherReceivablesToEquity')} onChange={props.onUpdateField} />
+                  <NumberField label="存货周转率变化（%）" name="inventoryTurnoverTrend" step={0.1} value={props.form.inventoryTurnoverTrend} emptyIfZero source={fs.inventoryTurnoverTrend} helperFormula={formulaFor('inventoryTurnoverTrend')} onChange={props.onUpdateField} />
+                  <NumberField label="应收周转率变化（%）" name="arTurnoverTrend" step={0.1} value={props.form.arTurnoverTrend} emptyIfZero source={fs.arTurnoverTrend} helperFormula={formulaFor('arTurnoverTrend')} onChange={props.onUpdateField} />
+                  <NumberField label="ROIC（%）" name="roic" value={props.form.roic} emptyIfZero source={fs.roic} helperText={helperFor('roic')} helperFormula={formulaFor('roic')} onChange={props.onUpdateField} />
+                  <NumberField label="资产负债率替代：D/E" name="deRatio" value={props.form.deRatio} emptyIfZero source={fs.deRatio} helperText={helperFor('deRatio')} helperFormula={formulaFor('deRatio')} onChange={props.onUpdateField} />
+                  <NumberField label="FCF 转化率（%）" name="fcfConversion" value={props.form.fcfConversion} emptyIfZero source={fs.fcfConversion} helperText={helperFor('fcfConversion')} helperFormula={formulaFor('fcfConversion')} onChange={props.onUpdateField} />
+                  <NumberField label="治理评分" name="governanceScore" min={0} max={100} step={1} value={props.form.governanceScore} emptyIfZero source={fs.governanceScore} helperText={helperFor('governanceScore')} helperFormula={formulaFor('governanceScore')} onChange={props.onUpdateField} />
+                  <NumberField label="护城河评分" name="moatScore" min={0} max={100} step={1} value={props.form.moatScore} emptyIfZero source={fs.moatScore} helperText={helperFor('moatScore')} helperFormula={formulaFor('moatScore')} onChange={props.onUpdateField} />
+                  <NumberField label="沪深300盈利收益率E/P（%）" name="csi300EarningsYield" step={0.01} value={props.form.csi300EarningsYield} emptyIfZero source={fs.csi300EarningsYield} helperFormula={formulaFor('csi300EarningsYield')} onChange={props.onUpdateField} />
+                  <NumberField label="10年期国债收益率（%）" name="cn10yYield" step={0.01} value={props.form.cn10yYield} emptyIfZero source={fs.cn10yYield} helperFormula={formulaFor('cn10yYield')} onChange={props.onUpdateField} />
+                </div>
+              </div>
+              <div>
+                {props.result.thermometer ? (
+                  <div className="kpi">
+                    <div className="item"><div>股债利差温度计</div><div className="v">{formatMaybePct(props.result.thermometer.spread / 100)}</div></div>
+                    <div className="item"><div>标准分</div><div className="v">{props.result.thermometer.zScore.toFixed(2)}</div></div>
+                    <div className="item"><div>估值温度</div><div className="v">{props.result.thermometer.status === 'cold' ? '偏冷(性价比高)' : props.result.thermometer.status === 'hot' ? '偏热(性价比低)' : '中性'}</div></div>
+                  </div>
+                ) : null}
+                <div className="warnings">
+                  {props.result.warnings.map((w) => <div key={w} className="warn-item">{w}</div>)}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <div className="sensitivity">
-          <h3>DCF 敏感性分析</h3>
-          {props.result.sensitivity.length ? props.result.sensitivity.map((s) => (
-            <div className="bar" key={s.label}>
-              <div>{s.label}</div>
-              <div className="track"><div className="fill" style={{ width: `${(s.value / props.sensitivityMax) * 100}%` }}></div></div>
-              <div>{formatMaybeYuan(s.value)}</div>
-            </div>
-          )) : <p>DCF 不可用，无法生成敏感性分析。</p>}
-        </div>
+        <Section title="快照" defaultOpen>
+          <div className="form-grid snapshot-grid">
+            <label>
+              快照名称
+              <input value={props.snapshotDraftName} onChange={(e) => props.onSnapshotDraftNameChange(e.target.value)} placeholder={buildSnapshotName(props.activeStockName, props.form.ticker, props.currentSourceTradeDate)} />
+            </label>
+            <label>
+              快照标签（逗号分隔）
+              <input value={props.snapshotDraftTags} onChange={(e) => props.onSnapshotDraftTagsChange(e.target.value)} placeholder="例如：茅台, 三季度, 符合预期" />
+            </label>
+            <button type="button" onClick={props.onSaveSnapshot}>保存当前快照</button>
+          </div>
+          {props.snapshotMessage ? <p className="snapshot-note">{props.snapshotMessage}</p> : null}
+        </Section>
 
-        <div className="warnings">
-          {props.result.warnings.map((w) => <div key={w} className="warn-item">{w}</div>)}
-        </div>
         <p className="disclaimer">免责声明：本工具仅用于学习研究，不构成任何投资建议。市场有风险，决策需独立判断。</p>
       </section>
     </main>

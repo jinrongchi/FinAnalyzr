@@ -26,10 +26,42 @@ function tagColorClass(tag: string): string {
   return `tag-chip--${hash % 6}`
 }
 
+function formatThermometerStatus(value?: 'cold' | 'neutral' | 'hot'): string {
+  if (!value) return 'N/A'
+  if (value === 'cold') return '偏冷'
+  if (value === 'hot') return '偏热'
+  return '中性'
+}
+
+function formatCapeMethod(snapshot?: Snapshot): string {
+  if (!snapshot) return 'N/A'
+  const source = snapshot.fieldSources?.cape
+  const note = snapshot.fieldNotes?.cape || ''
+  if (source === 'manual') return '手工输入'
+  if (note.includes('CPI不可用')) return '名义利润(降级)'
+  if (note.includes('CPI均值')) return '通胀调整'
+  if ((snapshot.form.cape || 0) > 0) return '已提供'
+  return 'N/A'
+}
+
+function snapshotRiskBadge(snapshot: Snapshot): { text: string; cls: string; reasons: string[] } {
+  const redFlagCount = snapshot.result.redFlags?.flags.length || 0
+  const hot = snapshot.result.thermometer?.status === 'hot'
+  const lowConfidence = snapshot.result.confidence < 0.6
+  const reasons: string[] = []
+  if (redFlagCount > 0) reasons.push(`红旗 ${redFlagCount} 项`) 
+  if (hot) reasons.push('估值温度偏热')
+  if (lowConfidence) reasons.push('估值置信度偏低')
+  if (redFlagCount > 0) return { text: '高风险', cls: 'risk-high', reasons }
+  if (hot || lowConfidence) return { text: '中风险', cls: 'risk-mid', reasons }
+  return { text: '低风险', cls: 'risk-low', reasons: ['当前未触发明显风险信号'] }
+}
+
 export function ReviewView(props: ReviewViewProps) {
   const { compareAId, compareBId, onCompareBIdChange } = props
   const [snapshotQuery, setSnapshotQuery] = useState('')
   const [snapshotValuationFilter, setSnapshotValuationFilter] = useState<'all' | 'undervalued' | 'overvalued'>('all')
+  const [snapshotRiskFilter, setSnapshotRiskFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all')
   const [sortConfig, setSortConfig] = useState<{
     priority: Array<'time' | 'stock' | 'gap' | 'valuation'>
     direction: Record<'time' | 'stock' | 'gap' | 'valuation', 'asc' | 'desc'>
@@ -46,6 +78,12 @@ export function ReviewView(props: ReviewViewProps) {
   const [newTagsInput, setNewTagsInput] = useState('')
   const [editingTag, setEditingTag] = useState<{ snapshotId: string; originalTag: string; value: string } | null>(null)
   const [showOtherStocksForB, setShowOtherStocksForB] = useState(false)
+  const [showAdvancedComparison, setShowAdvancedComparison] = useState(false)
+  const [showRiskOnlyComparison, setShowRiskOnlyComparison] = useState(false)
+  const [showWorseningOnlyComparison, setShowWorseningOnlyComparison] = useState(false)
+  const [riskDetailSnapshotId, setRiskDetailSnapshotId] = useState<string | null>(null)
+  const [riskReasonCopiedId, setRiskReasonCopiedId] = useState<string | null>(null)
+  const [prioritizeRiskSorting, setPrioritizeRiskSorting] = useState(false)
 
   const aOptions = useMemo(() => props.snapshots, [props.snapshots])
   const selectedATicker = props.compareA?.form.ticker
@@ -66,6 +104,30 @@ export function ReviewView(props: ReviewViewProps) {
     onCompareBIdChange(bOptions[0]?.id || '')
   }, [showOtherStocksForB, compareAId, compareBId, bOptions, onCompareBIdChange])
 
+  useEffect(() => {
+    if (!riskDetailSnapshotId) return
+
+    function onDocClick(event: MouseEvent): void {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      if (target.closest('.snapshot-risk-detail') || target.closest('.snapshot-risk-pill')) return
+      setRiskDetailSnapshotId(null)
+    }
+
+    function onEsc(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        setRiskDetailSnapshotId(null)
+      }
+    }
+
+    window.addEventListener('click', onDocClick)
+    window.addEventListener('keydown', onEsc)
+    return () => {
+      window.removeEventListener('click', onDocClick)
+      window.removeEventListener('keydown', onEsc)
+    }
+  }, [riskDetailSnapshotId])
+
   const filteredSnapshots = useMemo(() => {
     const keyword = snapshotQuery.trim().toLowerCase()
     const filtered = props.snapshots.filter((s) => {
@@ -81,10 +143,30 @@ export function ReviewView(props: ReviewViewProps) {
           : snapshotValuationFilter === 'undervalued'
             ? gap >= 0
             : gap < 0
-      return matchesKeyword && matchesValuation
+      const risk = snapshotRiskBadge(s)
+      const matchesRisk =
+        snapshotRiskFilter === 'all'
+          ? true
+          : snapshotRiskFilter === 'low'
+            ? risk.cls === 'risk-low'
+            : snapshotRiskFilter === 'mid'
+              ? risk.cls === 'risk-mid'
+              : risk.cls === 'risk-high'
+      return matchesKeyword && matchesValuation && matchesRisk
     })
 
     return [...filtered].sort((a, b) => {
+      if (prioritizeRiskSorting) {
+        const rank = (s: Snapshot): number => {
+          const cls = snapshotRiskBadge(s).cls
+          if (cls === 'risk-high') return 3
+          if (cls === 'risk-mid') return 2
+          return 1
+        }
+        const riskCmp = rank(b) - rank(a)
+        if (riskCmp !== 0) return riskCmp
+      }
+
       const aGap = a.result.intrinsicValue - a.form.price
       const bGap = b.result.intrinsicValue - b.form.price
 
@@ -117,7 +199,7 @@ export function ReviewView(props: ReviewViewProps) {
       // Final tie-breaker keeps latest snapshots first.
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  }, [props.snapshots, snapshotQuery, snapshotValuationFilter, sortConfig])
+  }, [props.snapshots, snapshotQuery, snapshotValuationFilter, snapshotRiskFilter, sortConfig, prioritizeRiskSorting])
 
   function toggleSort(field: 'time' | 'stock' | 'gap' | 'valuation'): void {
     setSortConfig((prev) => ({
@@ -199,6 +281,22 @@ export function ReviewView(props: ReviewViewProps) {
     setEditingTag(null)
   }
 
+  function canShowAdvancedRow(isRiskRow: boolean, isWorsening = false): boolean {
+    const riskPass = !showRiskOnlyComparison || isRiskRow
+    const worseningPass = !showWorseningOnlyComparison || isWorsening
+    return riskPass && worseningPass
+  }
+
+  async function copyRiskReasons(id: string, reasons: string[]): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(reasons.join('\n'))
+      setRiskReasonCopiedId(id)
+      window.setTimeout(() => setRiskReasonCopiedId((prev) => (prev === id ? null : prev)), 1200)
+    } catch {
+      setRiskReasonCopiedId(null)
+    }
+  }
+
   return (
     <main className="layout review-layout">
       <section className="panel">
@@ -217,6 +315,20 @@ export function ReviewView(props: ReviewViewProps) {
                 <option value="undervalued">仅低估（内在价值 {'>='} 当前股价）</option>
                 <option value="overvalued">仅高估（内在价值 {'<'} 当前股价）</option>
               </select>
+              <select value={snapshotRiskFilter} onChange={(e) => setSnapshotRiskFilter(e.target.value as 'all' | 'low' | 'mid' | 'high')}>
+                <option value="all">全部风险等级</option>
+                <option value="low">仅低风险</option>
+                <option value="mid">仅中风险</option>
+                <option value="high">仅高风险</option>
+              </select>
+              <label className="compare-risk-only-toggle snapshot-risk-sort-toggle">
+                <input
+                  type="checkbox"
+                  checked={prioritizeRiskSorting}
+                  onChange={(e) => setPrioritizeRiskSorting(e.target.checked)}
+                />
+                风险优先排序
+              </label>
             </div>
 
             {filteredSnapshots.length === 0 ? <p className="status-note">没有符合筛选条件的快照。</p> : (
@@ -245,6 +357,7 @@ export function ReviewView(props: ReviewViewProps) {
                       </th>
                       <th>内在价值</th>
                       <th>当前股价</th>
+                      <th>风险标签</th>
                       <th className="sortable-th">
                         <button
                           type="button"
@@ -271,6 +384,7 @@ export function ReviewView(props: ReviewViewProps) {
                       const gap = s.result.intrinsicValue - s.form.price
                       const gapPct = s.form.price > 0 ? gap / s.form.price : 0
                       const valuationStatus = gap > 0 ? '低估' : gap < 0 ? '高估' : '接近合理'
+                      const risk = snapshotRiskBadge(s)
                       return (
                         <tr key={s.id}>
                           <td>
@@ -327,6 +441,27 @@ export function ReviewView(props: ReviewViewProps) {
                           <td>{s.form.ticker}</td>
                           <td>{formatMaybeYuan(s.result.intrinsicValue)}</td>
                           <td>{formatMaybeYuan(s.form.price)}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className={`snapshot-risk-pill ${risk.cls}`}
+                              onClick={() => setRiskDetailSnapshotId((prev) => (prev === s.id ? null : s.id))}
+                              title="点击查看风险原因"
+                            >
+                              {risk.text}
+                            </button>
+                            {riskDetailSnapshotId === s.id ? (
+                              <div className="snapshot-risk-detail">
+                                <div className="snapshot-risk-detail-title">风险原因</div>
+                                <ul>
+                                  {risk.reasons.map((r) => <li key={`${s.id}-${r}`}>{r}</li>)}
+                                </ul>
+                                <button type="button" className="history-btn-secondary" onClick={() => void copyRiskReasons(s.id, risk.reasons)}>
+                                  {riskReasonCopiedId === s.id ? '已复制' : '复制原因'}
+                                </button>
+                              </div>
+                            ) : null}
+                          </td>
                           <td className={gap >= 0 ? 'delta-up' : 'delta-down'}>{formatMaybePct(gapPct)}</td>
                           <td className={gap >= 0 ? 'delta-up' : 'delta-down'}>{valuationStatus}</td>
                           <td><button type="button" onClick={() => props.onDeleteSnapshot(s.id)}>删除</button></td>
@@ -343,6 +478,31 @@ export function ReviewView(props: ReviewViewProps) {
 
       <section className="panel">
         <h2>参数版本对比</h2>
+        <div className="compare-controls">
+          <button
+            type="button"
+            className="history-btn-secondary"
+            onClick={() => setShowAdvancedComparison((v) => !v)}
+          >
+            {showAdvancedComparison ? '收起矩阵扩展项' : '展开矩阵扩展项'}
+          </button>
+          <label className="compare-risk-only-toggle">
+            <input
+              type="checkbox"
+              checked={showRiskOnlyComparison}
+              onChange={(e) => setShowRiskOnlyComparison(e.target.checked)}
+            />
+            仅看风险变化
+          </label>
+          <label className="compare-risk-only-toggle">
+            <input
+              type="checkbox"
+              checked={showWorseningOnlyComparison}
+              onChange={(e) => setShowWorseningOnlyComparison(e.target.checked)}
+            />
+            仅看风险恶化
+          </label>
+        </div>
         <div className="form-grid">
           <label>
             版本 A
@@ -405,6 +565,118 @@ export function ReviewView(props: ReviewViewProps) {
                 {formatMaybePct(props.compareB.result.marginSafety - props.compareA.result.marginSafety)}
               </div>
             </div>
+            {showAdvancedComparison ? (
+              <>
+            {canShowAdvancedRow(((props.compareB.result.intrinsicRange?.conservative || 0) - (props.compareA.result.intrinsicRange?.conservative || 0)) < 0, ((props.compareB.result.intrinsicRange?.conservative || 0) - (props.compareA.result.intrinsicRange?.conservative || 0)) < 0) ? (
+            <div className={`compare-row emphasis ${((props.compareB.result.intrinsicRange?.conservative || 0) - (props.compareA.result.intrinsicRange?.conservative || 0)) < 0 ? 'compare-row-risk' : 'compare-row-good'}`}>
+              <div>保守内在价值</div>
+              <div>{formatMaybeYuan(props.compareA.result.intrinsicRange?.conservative || 0)}</div>
+              <div>{formatMaybeYuan(props.compareB.result.intrinsicRange?.conservative || 0)}</div>
+              <div className={(props.compareB.result.intrinsicRange?.conservative || 0) - (props.compareA.result.intrinsicRange?.conservative || 0) >= 0 ? 'delta-up' : 'delta-down'}>
+                {formatMaybeYuan((props.compareB.result.intrinsicRange?.conservative || 0) - (props.compareA.result.intrinsicRange?.conservative || 0))}
+              </div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow((((props.compareB.result.intrinsicRange?.bull || 0) - (props.compareB.result.intrinsicRange?.bear || 0)) - ((props.compareA.result.intrinsicRange?.bull || 0) - (props.compareA.result.intrinsicRange?.bear || 0))) > 0, (((props.compareB.result.intrinsicRange?.bull || 0) - (props.compareB.result.intrinsicRange?.bear || 0)) - ((props.compareA.result.intrinsicRange?.bull || 0) - (props.compareA.result.intrinsicRange?.bear || 0))) > 0) ? (
+            <div className="compare-row">
+              <div>估值区间(悲观-乐观)</div>
+              <div>
+                {formatMaybeYuan(props.compareA.result.intrinsicRange?.bear || 0)} - {formatMaybeYuan(props.compareA.result.intrinsicRange?.bull || 0)}
+              </div>
+              <div>
+                {formatMaybeYuan(props.compareB.result.intrinsicRange?.bear || 0)} - {formatMaybeYuan(props.compareB.result.intrinsicRange?.bull || 0)}
+              </div>
+              <div className={((props.compareB.result.intrinsicRange?.bull || 0) - (props.compareB.result.intrinsicRange?.bear || 0)) - ((props.compareA.result.intrinsicRange?.bull || 0) - (props.compareA.result.intrinsicRange?.bear || 0)) >= 0 ? 'delta-up' : 'delta-down'}>
+                {formatMaybeYuan(((props.compareB.result.intrinsicRange?.bull || 0) - (props.compareB.result.intrinsicRange?.bear || 0)) - ((props.compareA.result.intrinsicRange?.bull || 0) - (props.compareA.result.intrinsicRange?.bear || 0)))}
+              </div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow(((props.compareB.result.conservativeMarginSafety || 0) - (props.compareA.result.conservativeMarginSafety || 0)) < 0, ((props.compareB.result.conservativeMarginSafety || 0) - (props.compareA.result.conservativeMarginSafety || 0)) < 0) ? (
+            <div className="compare-row">
+              <div>保守安全边际</div>
+              <div>{formatMaybePct(props.compareA.result.conservativeMarginSafety || 0)}</div>
+              <div>{formatMaybePct(props.compareB.result.conservativeMarginSafety || 0)}</div>
+              <div className={(props.compareB.result.conservativeMarginSafety || 0) - (props.compareA.result.conservativeMarginSafety || 0) >= 0 ? 'delta-up' : 'delta-down'}>
+                {formatMaybePct((props.compareB.result.conservativeMarginSafety || 0) - (props.compareA.result.conservativeMarginSafety || 0))}
+              </div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow(((props.compareB.result.thermometer?.spread || 0) - (props.compareA.result.thermometer?.spread || 0)) < 0, ((props.compareB.result.thermometer?.spread || 0) - (props.compareA.result.thermometer?.spread || 0)) < 0) ? (
+            <div className="compare-row">
+              <div>股债利差(%)</div>
+              <div>{formatMaybeNumber(props.compareA.result.thermometer?.spread || 0)}</div>
+              <div>{formatMaybeNumber(props.compareB.result.thermometer?.spread || 0)}</div>
+              <div className={(props.compareB.result.thermometer?.spread || 0) - (props.compareA.result.thermometer?.spread || 0) >= 0 ? 'delta-up' : 'delta-down'}>
+                {formatMaybeNumber((props.compareB.result.thermometer?.spread || 0) - (props.compareA.result.thermometer?.spread || 0))}
+              </div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow(props.compareA.result.thermometer?.status !== 'hot' && props.compareB.result.thermometer?.status === 'hot', props.compareA.result.thermometer?.status !== 'hot' && props.compareB.result.thermometer?.status === 'hot') ? (
+            <div className="compare-row">
+              <div>温度计状态</div>
+              <div>{formatThermometerStatus(props.compareA.result.thermometer?.status)}</div>
+              <div>{formatThermometerStatus(props.compareB.result.thermometer?.status)}</div>
+              <div className={props.compareA.result.thermometer?.status !== 'hot' && props.compareB.result.thermometer?.status === 'hot' ? 'delta-down' : props.compareA.result.thermometer?.status !== 'cold' && props.compareB.result.thermometer?.status === 'cold' ? 'delta-up' : ''}>
+                {formatThermometerStatus(props.compareA.result.thermometer?.status)} → {formatThermometerStatus(props.compareB.result.thermometer?.status)}
+              </div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow(((props.compareB.result.redFlags?.flags.length || 0) - (props.compareA.result.redFlags?.flags.length || 0)) > 0, ((props.compareB.result.redFlags?.flags.length || 0) - (props.compareA.result.redFlags?.flags.length || 0)) > 0) ? (
+            <div className={`compare-row ${((props.compareB.result.redFlags?.flags.length || 0) - (props.compareA.result.redFlags?.flags.length || 0)) > 0 ? 'compare-row-risk' : 'compare-row-good'}`}>
+              <div>红旗数量</div>
+              <div>{props.compareA.result.redFlags?.flags.length || 0}</div>
+              <div>{props.compareB.result.redFlags?.flags.length || 0}</div>
+              <div className={(props.compareB.result.redFlags?.flags.length || 0) - (props.compareA.result.redFlags?.flags.length || 0) <= 0 ? 'delta-up' : 'delta-down'}>
+                {(props.compareB.result.redFlags?.flags.length || 0) - (props.compareA.result.redFlags?.flags.length || 0)}
+              </div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow(((props.compareB.result.longTermReturn?.annualTotal || 0) - (props.compareA.result.longTermReturn?.annualTotal || 0)) < -0.01, ((props.compareB.result.longTermReturn?.annualTotal || 0) - (props.compareA.result.longTermReturn?.annualTotal || 0)) < -0.01) ? (
+            <div className={`compare-row ${((props.compareB.result.longTermReturn?.annualTotal || 0) - (props.compareA.result.longTermReturn?.annualTotal || 0)) < -0.01 ? 'compare-row-risk' : 'compare-row-good'}`}>
+              <div>长期年化回报</div>
+              <div>{formatMaybePct(props.compareA.result.longTermReturn?.annualTotal || 0)}</div>
+              <div>{formatMaybePct(props.compareB.result.longTermReturn?.annualTotal || 0)}</div>
+              <div className={(props.compareB.result.longTermReturn?.annualTotal || 0) - (props.compareA.result.longTermReturn?.annualTotal || 0) >= 0 ? 'delta-up' : 'delta-down'}>
+                {formatMaybePct((props.compareB.result.longTermReturn?.annualTotal || 0) - (props.compareA.result.longTermReturn?.annualTotal || 0))}
+              </div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow(formatCapeMethod(props.compareA) !== formatCapeMethod(props.compareB), formatCapeMethod(props.compareA) !== formatCapeMethod(props.compareB)) ? (
+            <div className="compare-row">
+              <div>CAPE口径</div>
+              <div>{formatCapeMethod(props.compareA)}</div>
+              <div>{formatCapeMethod(props.compareB)}</div>
+              <div>{formatCapeMethod(props.compareA)} → {formatCapeMethod(props.compareB)}</div>
+            </div>
+            ) : null}
+            {canShowAdvancedRow(((props.compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (props.compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)) > 10, ((props.compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (props.compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)) > 10) ? (
+            <div className="compare-row">
+              <div>PE/PB/PCF 分位(5Y/10Y)</div>
+              <div>
+                {formatMaybeNumber(props.compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0)} / {formatMaybeNumber(props.compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)}<br />
+                {formatMaybeNumber(props.compareA.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile5y || 0)} / {formatMaybeNumber(props.compareA.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile10y || 0)}<br />
+                {formatMaybeNumber(props.compareA.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile5y || 0)} / {formatMaybeNumber(props.compareA.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile10y || 0)}
+              </div>
+              <div>
+                {formatMaybeNumber(props.compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0)} / {formatMaybeNumber(props.compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)}<br />
+                {formatMaybeNumber(props.compareB.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile5y || 0)} / {formatMaybeNumber(props.compareB.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile10y || 0)}<br />
+                {formatMaybeNumber(props.compareB.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile5y || 0)} / {formatMaybeNumber(props.compareB.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile10y || 0)}
+              </div>
+              <div className={((props.compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (props.compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)) >= 0 ? 'delta-up' : 'delta-down'}>
+                ΔPE(5Y) {formatMaybeNumber((props.compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0) - (props.compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0))}<br />
+                ΔPE(10Y) {formatMaybeNumber((props.compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (props.compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0))}
+              </div>
+            </div>
+            ) : null}
+              </>
+            ) : (
+              <div className="compare-row compare-row-collapsed-note">
+                <div>矩阵扩展项</div>
+                <div>已折叠</div>
+                <div>点击上方按钮展开</div>
+                <div>-</div>
+              </div>
+            )}
           </div>
         )}
       </section>

@@ -3,7 +3,7 @@ import { formatTradeDate } from '../lib/historyDate'
 import { logger } from '../lib/logger'
 import { loadTushareToken, persistTushareToken } from '../lib/tokenStore'
 import { getTushareHealthUrl, loadFromTushare } from '../lib/tushare'
-import type { FormState, SearchHistoryEntry } from '../types'
+import type { FieldNotes, FieldSources, FormState, SearchHistoryEntry } from '../types'
 
 type SyncResult = {
   mergedForm: FormState
@@ -11,6 +11,8 @@ type SyncResult = {
   sourceTradeDate?: string
   createdAt?: string
   notes: string[]
+  fieldSources?: FieldSources
+  fieldNotes?: FieldNotes
 }
 
 type SyncOutcome =
@@ -95,8 +97,7 @@ export function useTushareSync() {
       setCurrentStockName(stockName)
       setCurrentSourceTradeDate(loaded.sourceTradeDate)
 
-      const notes = loaded.notes.length ? `；${loaded.notes.join(' ')}` : ''
-      setSyncStatus(`已加载 ${stockName}，交易日 ${formatTradeDate(loaded.sourceTradeDate)}${notes}`)
+      setSyncStatus(`已加载 ${stockName}，交易日 ${formatTradeDate(loaded.sourceTradeDate)}。`)
 
       logger.info('fetch success', {
         ticker: mergedForm.ticker,
@@ -111,6 +112,8 @@ export function useTushareSync() {
           stockName,
           sourceTradeDate: loaded.sourceTradeDate,
           notes: loaded.notes,
+          fieldSources: loaded.fieldSources,
+          fieldNotes: loaded.fieldNotes,
         },
       }
     } catch (error) {
@@ -146,6 +149,8 @@ export function useTushareSync() {
           sourceTradeDate: loaded.sourceTradeDate,
           createdAt: item.createdAt,
           notes: loaded.notes,
+          fieldSources: loaded.fieldSources,
+          fieldNotes: loaded.fieldNotes,
         },
       }
     } catch (error) {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { deleteSnapshot, loadSnapshots, saveSnapshot, updateSnapshotTags } from '../lib/snapshotStore'
-import type { AnalysisResult, FormState, Snapshot } from '../types'
+import type { AnalysisResult, FieldNotes, FieldSources, FormState, Snapshot } from '../types'
 
 type SaveSnapshotOutcome = {
   created: Snapshot
@@ -41,6 +41,8 @@ export function useSnapshots() {
     label: string,
     sourceTradeDate?: string,
     tags: string[] = [],
+    fieldSources?: FieldSources,
+    fieldNotes?: FieldNotes,
   ): SaveSnapshotOutcome | null {
     const trimmedLabel = label.trim()
     const duplicated = snapshots.find((snapshot) => snapshot.label === trimmedLabel)
@@ -53,7 +55,7 @@ export function useSnapshots() {
       overwritten = true
     }
 
-    const created = saveSnapshot(form, result, trimmedLabel, sourceTradeDate, tags)
+    const created = saveSnapshot(form, result, trimmedLabel, sourceTradeDate, tags, fieldSources, fieldNotes)
     const next = refreshSnapshots()
     setCompareAId(created.id)
     if (!compareBId && next[1]) setCompareBId(next[1].id)

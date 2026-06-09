@@ -1,4 +1,4 @@
-import type { AnalysisResult, FormState, Snapshot } from '../types'
+import type { AnalysisResult, FieldNotes, FieldSources, FormState, Snapshot } from '../types'
 import { APP_LIMITS } from '../config'
 import { getStorage, getStorageKey } from './storage'
 
@@ -21,6 +21,8 @@ function safeParse(raw: string | null): Snapshot[] {
       label: item.label || '',
       form: item.form as Snapshot['form'],
       result: item.result as Snapshot['result'],
+      fieldSources: item.fieldSources as FieldSources | undefined,
+      fieldNotes: item.fieldNotes as FieldNotes | undefined,
     }))
   } catch {
     return []
@@ -45,6 +47,8 @@ export function saveSnapshot(
   label: string,
   sourceTradeDate?: string,
   tags: string[] = [],
+  fieldSources?: FieldSources,
+  fieldNotes?: FieldNotes,
 ): Snapshot {
   const existing = loadSnapshots()
   const snapshot: Snapshot = {
@@ -55,6 +59,8 @@ export function saveSnapshot(
     label: label.trim() || `${form.ticker} ${new Date().toLocaleString('zh-CN')}`,
     form,
     result,
+    fieldSources,
+    fieldNotes,
   }
   const next = [snapshot, ...existing].slice(0, MAX_SNAPSHOTS)
   STORAGE.setItem(STORAGE_KEY, JSON.stringify(next))

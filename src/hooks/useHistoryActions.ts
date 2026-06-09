@@ -32,6 +32,7 @@ type UseHistoryActionsOptions = {
   setHistoryItemFeedback: (value: { id: string; message: string; tone: 'success' | 'error' | 'info' } | null) => void
   setSyncStatus: (value: string) => void
   setView: (view: 'analyzer' | 'history' | 'review') => void
+  clearFieldMetadata: () => void
 }
 
 export function useHistoryActions(options: UseHistoryActionsOptions) {
@@ -57,6 +58,7 @@ export function useHistoryActions(options: UseHistoryActionsOptions) {
   }
 
   function handleSelectHistory(item: SearchHistoryEntry): void {
+    options.clearFieldMetadata()
     options.setForm(item.form)
     options.setCurrentStockContext(item.stockName, item.sourceTradeDate)
     options.setSnapshotDraftName(buildSnapshotName(item.stockName, item.ticker, item.sourceTradeDate))

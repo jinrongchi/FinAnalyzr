@@ -14,10 +14,15 @@ import { ATTRIBUTION_FIELDS } from './lib/comparisonFields'
 import { buildSnapshotName } from './lib/historyDate'
 import { logger } from './lib/logger'
 import { analyze, grade } from './lib/valuation'
-import type { SearchHistoryEntry } from './types'
+import type { FieldNotes, FieldSources, FormState, SearchHistoryEntry } from './types'
+
+type ManualEditedFields = Partial<Record<keyof FormState, true>>
 
 function App() {
   const [historyItemFeedback, setHistoryItemFeedback] = useState<{ id: string; message: string; tone: 'success' | 'error' | 'info' } | null>(null)
+  const [fieldSources, setFieldSources] = useState<FieldSources>({})
+  const [fieldNotes, setFieldNotes] = useState<FieldNotes>({})
+  const [manualEditedFields, setManualEditedFields] = useState<ManualEditedFields>({})
 
   const {
     searchHistory,
@@ -89,6 +94,9 @@ function App() {
   } = useAnalyzerForm(() => {
     resetForTickerChange()
     resetCurrentStockContext()
+    setFieldSources({})
+    setFieldNotes({})
+    setManualEditedFields({})
   })
   const {
     handleRefreshHistoryItem,
@@ -111,6 +119,11 @@ function App() {
       }
       setView(nextView)
     },
+    clearFieldMetadata: () => {
+      setFieldSources({})
+      setFieldNotes({})
+      setManualEditedFields({})
+    },
   })
 
   async function handleFetchTushare(forceRefresh = false): Promise<void> {
@@ -118,8 +131,18 @@ function App() {
     const synced = await syncAnalyzerForm(form, forceRefresh)
     if (!synced.ok) return
 
-    const { mergedForm, stockName, sourceTradeDate } = synced.data
+    const { mergedForm, stockName, sourceTradeDate, fieldSources: sources, fieldNotes: notesByField } = synced.data
     setForm(mergedForm)
+    setFieldSources(() => {
+      const next = { ...(sources || {}) }
+      for (const key of Object.keys(manualEditedFields) as Array<keyof FormState>) {
+        if (manualEditedFields[key] && !next[key]) {
+          next[key] = 'manual'
+        }
+      }
+      return next
+    })
+    setFieldNotes(notesByField || {})
     setSnapshotDraftName(buildSnapshotName(stockName, mergedForm.ticker, sourceTradeDate))
 
     saveHistoryEntry({
@@ -129,6 +152,20 @@ function App() {
       form: mergedForm,
     })
     setHistoryMessage('')
+  }
+
+  function handleUpdateField(name: keyof typeof form, value: string): void {
+    updateField(name, value)
+    if (name === 'ticker') return
+
+    setManualEditedFields((prev) => ({ ...prev, [name]: true }))
+    setFieldSources((prev) => ({ ...prev, [name]: 'manual' }))
+    setFieldNotes((prev) => {
+      if (!prev[name]) return prev
+      const next = { ...prev }
+      delete next[name]
+      return next
+    })
   }
 
   const result = useMemo(() => analyze(form), [form])
@@ -190,7 +227,7 @@ function App() {
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean)
-    const saved = saveSnapshotWithOverwrite(form, result, snapshotName, currentSourceTradeDate, snapshotTags)
+    const saved = saveSnapshotWithOverwrite(form, result, snapshotName, currentSourceTradeDate, snapshotTags, fieldSources, fieldNotes)
     if (!saved) return
     const message = saved.overwritten
       ? `已覆盖同名快照：${saved.created.label}`
@@ -208,7 +245,7 @@ function App() {
 
   function handleAddSnapshotFromHistory(item: SearchHistoryEntry): void {
     const label = buildSnapshotName(item.stockName, item.ticker, item.sourceTradeDate)
-    const saved = saveSnapshotWithOverwrite(item.form, analyze(item.form), label, item.sourceTradeDate)
+    const saved = saveSnapshotWithOverwrite(item.form, analyze(item.form), label, item.sourceTradeDate, [], fieldSources, fieldNotes)
     if (!saved) return
     const message = saved.overwritten
       ? `已覆盖同名快照：${saved.created.label}`
@@ -227,6 +264,7 @@ function App() {
       resetForm()
       resetCurrentStockContext()
       setSyncStatus('')
+      setManualEditedFields({})
     }
     switchView(nextView)
   }
@@ -237,7 +275,7 @@ function App() {
       <header className="hero">
         <div className="badge">A股长期价值投资工具</div>
         <h1>{view === 'analyzer' && currentStockName ? `${currentStockName} · 长期价值评估` : '长期主义，不猜涨跌，只算价值与安全边际'}</h1>
-        <p>用 DCF、相对估值、DDM 与质量评分，形成可解释的内在价值区间。</p>
+        <p>用 DCF、ROE-PB、相对估值与财务过滤，形成可解释的内在价值区间。</p>
         <div className="top-nav">
           <button type="button" className={`nav-btn ${view === 'analyzer' ? 'is-active' : ''}`} onClick={() => handleSwitchView('analyzer')}>
             估值工具
@@ -317,8 +355,10 @@ function App() {
           result={result}
           finalGrade={finalGrade}
           sensitivityMax={sensitivityMax}
+          fieldSources={fieldSources}
+          fieldNotes={fieldNotes}
           onInputChange={handleInputChange}
-          onUpdateField={updateField}
+          onUpdateField={handleUpdateField}
           onFetchTushare={(forceRefresh) => void handleFetchTushare(forceRefresh)}
           onSnapshotDraftNameChange={setSnapshotDraftName}
           onSnapshotDraftTagsChange={setSnapshotDraftTags}
