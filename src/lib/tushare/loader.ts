@@ -133,7 +133,29 @@ export async function loadFromTushare(
   }
   if (!latestDaily) throw new Error(`未查询到 ${tsCode} 的 daily_basic 数据`)
 
-  const { close, peTtm, dvTtm, totalShareWan, sharesYi, pcf, pePercentile5y, pbPercentile5y, pcfPercentile5y, pePercentile10y, pbPercentile10y, pcfPercentile10y } = deriveMarketData({ latestDaily, dailyFields, dailyBasic10yTable, daily10yFields, dailyPcf10yTable, dailyPcfFields, current, fieldSources })
+  const {
+    close,
+    peTtm,
+    dvTtm,
+    totalShareWan,
+    sharesYi,
+    pcf,
+    pePercentile5y,
+    pbPercentile5y,
+    pcfPercentile5y,
+    pePercentile10y,
+    pbPercentile10y,
+    pcfPercentile10y,
+    peAvg6m,
+    peAvg1y,
+    peAvg3y,
+    pbAvg6m,
+    pbAvg1y,
+    pbAvg3y,
+    pcfAvg6m,
+    pcfAvg1y,
+    pcfAvg3y,
+  } = deriveMarketData({ latestDaily, dailyFields, dailyBasic10yTable, daily10yFields, dailyPcf10yTable, dailyPcfFields, current, fieldSources })
 
   const { eps, bvps, roic, deRatio, finaInvTurn, finaArTurn, ebitdaPerShare, fcfYi, fcfConversion, derivedFcfGrowth, derivedNetDebt, balanceGoodwill, balanceOtherReceivables, balanceEquity } = deriveFundamentalCashflowData({ latestFina, finaFields, latestCash, previousCash, cashFields, latestBalance, balanceFields, current, close, peTtm, totalShareWan, fieldSources, notes, addFieldNote })
 
@@ -223,6 +245,15 @@ export async function loadFromTushare(
       pePercentile10y: roundNumber(pePercentile10y, 2),
       pbPercentile10y: roundNumber(pbPercentile10y, 2),
       pcfPercentile10y: roundNumber(pcfPercentile10y, 2),
+      peAvg6m: roundNumber(peAvg6m, 4),
+      peAvg1y: roundNumber(peAvg1y, 4),
+      peAvg3y: roundNumber(peAvg3y, 4),
+      pbAvg6m: roundNumber(pbAvg6m, 4),
+      pbAvg1y: roundNumber(pbAvg1y, 4),
+      pbAvg3y: roundNumber(pbAvg3y, 4),
+      pcfAvg6m: roundNumber(pcfAvg6m, 4),
+      pcfAvg1y: roundNumber(pcfAvg1y, 4),
+      pcfAvg3y: roundNumber(pcfAvg3y, 4),
       fcfYield: roundNumber(fcfYield, 4),
       equityBondSpreadMean10y: roundNumber(equityBondSpreadMean10y, 4),
       equityBondSpreadStd10y: roundNumber(equityBondSpreadStd10y, 4),

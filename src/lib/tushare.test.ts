@@ -210,6 +210,122 @@ describe('loadFromTushare source labeling', () => {
     expect(result.patch.discountRate).toBe(12)
   })
 
+  it('recomputes percentile fields from fetched history instead of keeping stale current values', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const raw = String(init?.body || '{}')
+      const payload = JSON.parse(raw) as { api_name?: string; params?: { start_date?: string } }
+
+      switch (payload.api_name) {
+        case 'daily_basic':
+          if (payload.params?.start_date) {
+            return {
+              ok: true,
+              json: async () => ok(
+                ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+                [
+                  ['600519.SH', '20260608', 1600, 25, 8, 1.2, 125619.78],
+                  ['600519.SH', '20250608', 1500, 20, 7, 1.1, 125619.78],
+                  ['600519.SH', '20240608', 1400, 15, 6, 1.0, 125619.78],
+                  ['600519.SH', '20230608', 1300, 10, 5, 0.9, 125619.78],
+                ],
+              ),
+            }
+          }
+
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+              [['600519.SH', '20260608', 1600, 25, 8, 1.2, 125619.78]],
+            ),
+          }
+        case 'fina_indicator':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'eps', 'bps', 'ebitda', 'roic', 'debt_to_assets', 'ocf_to_or'],
+              [['600519.SH', '20260331', 65, 200, 8000000, 24, 15, 30]],
+            ),
+          }
+        case 'cashflow':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'n_cashflow_act', 'n_cashflow_inv_act', 'free_cashflow'],
+              [['600519.SH', '20260331', 10000000000, -2000000000, 8000000000]],
+            ),
+          }
+        case 'stock_basic':
+          return {
+            ok: true,
+            json: async () => ok(['ts_code', 'name', 'list_date', 'industry', 'market'], [['600519.SH', '贵州茅台', '20010827', '食品饮料', '主板']]),
+          }
+        case 'balancesheet':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'monetary_cap', 'total_cur_liab', 'total_ncl', 'goodwill', 'oth_receiv', 'notes_receiv', 'total_hldr_eqy_exc_min_int'],
+              [['600519.SH', '20260331', 1000000000, 500000000, 300000000, 10000000, 5000000, 1000000, 3000000000]],
+            ),
+          }
+        case 'stk_factor':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        case 'index_dailybasic':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        case 'income':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        case 'cn_cpi':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        default:
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ code: -1, msg: 'unsupported api' }),
+          }
+      }
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await loadFromTushare(
+      '',
+      '600519',
+      {
+        ...DEFAULT_FORM,
+        pePercentile5y: 51.4,
+        pePercentile10y: 26.1,
+        pbPercentile5y: 56.8,
+        pbPercentile10y: 52.3,
+        pcfPercentile5y: 33.3,
+        pcfPercentile10y: 22.2,
+      },
+      { forceRefresh: true },
+    )
+
+    expect(result.patch.pePercentile5y).toBe(100)
+    expect(result.patch.pePercentile10y).toBe(100)
+    expect(result.patch.pbPercentile5y).toBe(100)
+    expect(result.patch.pbPercentile10y).toBe(100)
+    expect(result.patch.peAvg6m).toBe(25)
+    expect(result.patch.peAvg1y).toBe(22.5)
+    expect(result.patch.peAvg3y).toBe(20)
+    expect(result.patch.pbAvg6m).toBe(8)
+    expect(result.patch.pbAvg1y).toBe(7.5)
+    expect(result.patch.pbAvg3y).toBe(7)
+  })
+
   it('auto-fills optional related-party and guarantee risk ratios when tables are available', async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const raw = String(init?.body || '{}')

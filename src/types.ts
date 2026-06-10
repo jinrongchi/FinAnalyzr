@@ -47,6 +47,15 @@ export type FormState = {
   pePercentile10y: number
   pbPercentile10y: number
   pcfPercentile10y: number
+  peAvg6m: number
+  peAvg1y: number
+  peAvg3y: number
+  pbAvg6m: number
+  pbAvg1y: number
+  pbAvg3y: number
+  pcfAvg6m: number
+  pcfAvg1y: number
+  pcfAvg3y: number
   fcfYield: number
   industryOverride: number
   sotpPerShare: number
@@ -97,6 +106,13 @@ export type PercentileCloudPoint = {
   percentile10y: number
 }
 
+export type ValuationAveragesPoint = {
+  metric: 'PE' | 'PB' | 'PCF'
+  avg6m: number
+  avg1y: number
+  avg3y: number
+}
+
 export type ValuationThermometer = {
   spread: number
   zScore: number
@@ -137,6 +153,7 @@ export type AnalysisResult = {
   redFlags?: RedFlagResult
   longTermReturn?: LongTermReturnBreakdown
   percentileCloud?: PercentileCloudPoint[]
+  valuationAverages?: ValuationAveragesPoint[]
   thermometer?: ValuationThermometer
   marketCycleAdjustment?: number
   dataCoverage?: DataCoverage

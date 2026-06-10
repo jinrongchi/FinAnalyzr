@@ -85,6 +85,29 @@ function buildPercentileCloud(input: FormState): AnalysisResult['percentileCloud
   ]
 }
 
+function buildValuationAverages(input: FormState): AnalysisResult['valuationAverages'] {
+  return [
+    {
+      metric: 'PE',
+      avg6m: clamp(input.peAvg6m, 0, Number.POSITIVE_INFINITY),
+      avg1y: clamp(input.peAvg1y, 0, Number.POSITIVE_INFINITY),
+      avg3y: clamp(input.peAvg3y, 0, Number.POSITIVE_INFINITY),
+    },
+    {
+      metric: 'PB',
+      avg6m: clamp(input.pbAvg6m, 0, Number.POSITIVE_INFINITY),
+      avg1y: clamp(input.pbAvg1y, 0, Number.POSITIVE_INFINITY),
+      avg3y: clamp(input.pbAvg3y, 0, Number.POSITIVE_INFINITY),
+    },
+    {
+      metric: 'PCF',
+      avg6m: clamp(input.pcfAvg6m, 0, Number.POSITIVE_INFINITY),
+      avg1y: clamp(input.pcfAvg1y, 0, Number.POSITIVE_INFINITY),
+      avg3y: clamp(input.pcfAvg3y, 0, Number.POSITIVE_INFINITY),
+    },
+  ]
+}
+
 function buildThermometer(input: FormState): NonNullable<AnalysisResult['thermometer']> {
   const spread = input.csi300EarningsYield > 0
     ? input.csi300EarningsYield - input.cn10yYield
@@ -169,6 +192,7 @@ export function analyze(input: FormState): AnalysisResult {
   const longTermReturn = buildLongTermReturn(input, base.value)
 
   const percentileCloud = buildPercentileCloud(input)
+  const valuationAverages = buildValuationAverages(input)
   const thermometer = buildThermometer(input)
   const marketCycleAdjustment = computeMarketCycleAdjustment(thermometer)
   const marketCapYi = input.price > 0 && input.sharesOutstanding > 0 ? input.price * input.sharesOutstanding : 0
@@ -226,6 +250,7 @@ export function analyze(input: FormState): AnalysisResult {
     redFlags,
     longTermReturn,
     percentileCloud,
+    valuationAverages,
     thermometer,
     marketCycleAdjustment,
     dataCoverage,

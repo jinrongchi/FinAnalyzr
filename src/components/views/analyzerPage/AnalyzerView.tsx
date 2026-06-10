@@ -1,7 +1,7 @@
 import type { ChangeEvent } from 'react'
 import { useMemo, useState } from 'react'
 import { NumberField } from '../../NumberField'
-import { formatMaybePct, formatMaybeYuan } from '../../../lib/displayFormat'
+import { formatMaybeNumber, formatMaybePct, formatMaybeYuan } from '../../../lib/displayFormat'
 import { buildSnapshotName } from '../../../lib/historyDate'
 import { formatPct } from '../../../lib/valuation/index'
 import type { AnalysisResult, FieldNotes, FieldSources, FormState, ModelResult } from '../../../types'
@@ -271,25 +271,38 @@ export function AnalyzerView(props: AnalyzerViewProps) {
               </div>
               <div>
                 <ModelBox model={relModel} />
-                {props.result.percentileCloud?.length ? (
-                  <div className="percentile-cloud-card">
-                    <div className="percentile-cloud-head">
-                      <h3>历史分位云图</h3>
-                      <span className="percentile-cloud-subhead">5Y / 10Y</span>
+                {props.result.valuationAverages?.length ? (
+                  <div className="valuation-avg-card">
+                    <div className="valuation-avg-head">
+                      <h3>估值均值柱状图</h3>
+                      <span className="valuation-avg-subhead">6M / 1Y / 3Y</span>
                     </div>
-                    <div className="percentile-cloud-list">
-                    {props.result.percentileCloud.map((p) => (
-                      <div className="percentile-cloud-row" key={p.metric}>
-                        <div className="percentile-cloud-label">{p.metric}</div>
-                        <div className="percentile-cloud-track">
-                          <div
-                            className="percentile-cloud-fill"
-                            style={{ width: `${Math.max(0, Math.min(100, p.percentile10y))}%` }}
-                          />
-                        </div>
-                        <div className="percentile-cloud-value">{(p.percentile5y ?? 0).toFixed(1)}% / {p.percentile10y.toFixed(1)}%</div>
-                      </div>
-                    ))}
+                    <div className="valuation-avg-list">
+                      {props.result.valuationAverages.map((point) => {
+                        const metricMax = Math.max(point.avg6m, point.avg1y, point.avg3y, 1)
+                        const bars = [
+                          { label: '6M', value: point.avg6m, cls: 'is-6m' },
+                          { label: '1Y', value: point.avg1y, cls: 'is-1y' },
+                          { label: '3Y', value: point.avg3y, cls: 'is-3y' },
+                        ]
+
+                        return (
+                          <div key={point.metric} className="valuation-avg-metric">
+                            <div className="valuation-avg-metric-label">{point.metric}</div>
+                            <div className="valuation-avg-bars">
+                              {bars.map((bar) => (
+                                <div key={bar.label} className="valuation-avg-row">
+                                  <div className="valuation-avg-term">{bar.label}</div>
+                                  <div className="valuation-avg-track">
+                                    <div className={`valuation-avg-fill ${bar.cls}`} style={{ width: `${(bar.value / metricMax) * 100}%` }} />
+                                  </div>
+                                  <div className="valuation-avg-value">{formatMaybeNumber(bar.value, 2)}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 ) : null}
