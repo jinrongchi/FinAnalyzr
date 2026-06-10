@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AnalyzerView } from './components/views/AnalyzerView'
+import { AnalyzerView } from './components/views/analyzerPage/AnalyzerView'
 import { HistoryView } from './components/views/HistoryView'
-import { ReviewView } from './components/views/ReviewView'
+import { ReviewView } from './components/views/reviewPage/ReviewView'
 import { useAnalyzerForm } from './hooks/useAnalyzerForm'
 import { useAppViewState } from './hooks/useAppViewState'
 import { useFieldMetadata } from './hooks/useFieldMetadata'
@@ -14,7 +14,7 @@ import { buildBacktestSeries, computeAssumptionAttribution } from './lib/backtes
 import { ATTRIBUTION_FIELDS } from './lib/comparisonFields'
 import { buildSnapshotName } from './lib/historyDate'
 import { logger } from './lib/logger'
-import { analyze, grade } from './lib/valuation'
+import { analyze, grade } from './lib/valuation/index'
 import type { SearchHistoryEntry } from './types'
 
 function App() {

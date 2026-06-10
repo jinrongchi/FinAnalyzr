@@ -2,6 +2,11 @@ import type { FormState } from '../types'
 
 export const DEFAULT_FORM: FormState = {
   ticker: '',
+  isST: 0,
+  isGrowthBoard: 0,
+  isPolicySensitive: 0,
+  isFinancialSector: 0,
+  listedYears: 0,
   price: 0,
   fcf0: 0,
   forecastYears: 10,
@@ -26,6 +31,10 @@ export const DEFAULT_FORM: FormState = {
   ocfToNi3yAvg: 0,
   goodwillToEquity: 0,
   otherReceivablesToEquity: 0,
+  relatedPartySalesToRevenue: 0,
+  externalGuaranteeToEquity: 0,
+  inventoryTurnoverDays: 0,
+  arTurnoverDays: 0,
   inventoryTurnoverTrend: 0,
   arTurnoverTrend: 0,
   csi300EarningsYield: 0,

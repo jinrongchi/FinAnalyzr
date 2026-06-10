@@ -363,12 +363,131 @@ select:focus {
   gap: 8px;
 }
 
+.expected-return-kpi {
+  margin-top: 10px;
+}
+
+.conformance-panel {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+}
+
+.conformance-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.conformance-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.conformance-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.conformance-item--on {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.conformance-item--off {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.conformance-item--warn {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.conformance-item--block {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.conformance-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.conformance-badge {
+  font-size: 12px;
+  color: #475569;
+}
+
+.conformance-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+
 .warn-item {
   border-left: 4px solid var(--warn);
   background: #fffbeb;
   padding: 8px 10px;
   border-radius: 8px;
   font-size: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.warn-item--high {
+  border-left-color: #b91c1c;
+  background: #fef2f2;
+}
+
+.warn-item--medium {
+  border-left-color: #b45309;
+  background: #fffbeb;
+}
+
+.warn-item--info {
+  border-left-color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.warn-badge {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.warn-badge--high {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+
+.warn-badge--medium {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+.warn-badge--info {
+  color: #1e40af;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.thermometer-context {
+  margin-top: 8px;
 }
 
 .grade-good {

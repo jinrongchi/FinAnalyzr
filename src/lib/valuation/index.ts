@@ -1,15 +1,4 @@
 import type { AnalysisResult, FormState, ModelResult } from '../../types'
-import { DEFAULT_FORM } from '../../data/defaults'
-import {
-  DATA_COVERAGE_CHECKS,
-  INDUSTRY_OVERRIDE_PROFILE,
-  INDUSTRY_PROFILES,
-  MODEL_WEIGHTS,
-  QUALITY_BANDS,
-  type IndustryProfile,
-  type ModelKey,
-  type ModelWeights,
-} from './config'
 import {
   buildModelResults,
   computeDCF,
@@ -18,16 +7,22 @@ import {
   computeRelative,
   runSensitivity,
 } from './models'
-import { clamp, scoreFromThreshold } from './utils'
+import {
+  aggregate,
+  computeCompositeNormalizedScore,
+  computeQuality,
+  detectIndustryProfile,
+  normalizeInput,
+} from './scoring'
+import { clamp } from './utils'
 import { formatPct, formatYuan, grade } from './presentation'
-
-function getWeight(weights: ModelWeights, key: ModelKey): number {
-  return weights[key] || 0
-}
-
-function isUsableModel(model: ModelResult): model is ModelResult & { value: number } {
-  return model.valid && Number.isFinite(model.value)
-}
+import { computeDataCoverage } from './dataCoverage'
+import {
+  buildConformanceChecks,
+  collectWarnings,
+  computeConfidenceAdjusted,
+  computeRedFlags,
+} from './riskSignals'
 
 function modelValue(model: ModelResult): number {
   return Number.isFinite(model.value) ? (model.value as number) : 0
@@ -37,93 +32,9 @@ function computeMarginSafety(price: number, intrinsicValue: number): number {
   return price > 0 && intrinsicValue > 0 ? (intrinsicValue - price) / price : 0
 }
 
-function normalizeInput(raw: FormState): FormState {
-  const merged = { ...DEFAULT_FORM, ...raw } as FormState
-  const out = { ...merged } as FormState
-  const keys = Object.keys(DEFAULT_FORM) as Array<keyof FormState>
-
-  for (const key of keys) {
-    if (key === 'ticker') {
-      out.ticker = String((merged.ticker || '').trim())
-      continue
-    }
-    const value = Number((merged as Record<string, unknown>)[key as string])
-    ;(out as Record<string, unknown>)[key as string] = Number.isFinite(value)
-      ? value
-      : (DEFAULT_FORM as Record<string, unknown>)[key as string]
-  }
-
-  return out
-}
-
-function detectIndustryProfile(input: FormState): IndustryProfile {
-  const override = INDUSTRY_OVERRIDE_PROFILE[input.industryOverride]
-  if (override) return INDUSTRY_PROFILES[override]
-
-  const dividendYield = input.price > 0 ? input.dividend0 / input.price : 0
-  if (input.deRatio >= 4 || dividendYield >= 0.045) {
-    return INDUSTRY_PROFILES.financialRealEstate
-  }
-  if (input.roic >= 14 && input.fcfGrowth >= 6) {
-    return INDUSTRY_PROFILES.consumerHealthcare
-  }
-  if (input.fcf0 <= 0 || input.fcfGrowth <= 0) {
-    return INDUSTRY_PROFILES.cyclical
-  }
-  if (dividendYield >= 0.03 && input.fcf0 > 0 && input.fcfGrowth < 6) {
-    return INDUSTRY_PROFILES.infraAssetHeavy
-  }
-  return INDUSTRY_PROFILES.technologyPlatform
-}
-
-export function computeQuality(input: FormState): number {
-  const roicScore = scoreFromThreshold(input.roic, QUALITY_BANDS.roic)
-  const deScore = scoreFromThreshold(-input.deRatio, QUALITY_BANDS.de)
-  const fcfScore = scoreFromThreshold(input.fcfConversion, QUALITY_BANDS.fcf)
-  return Math.round(
-    roicScore * 0.25
-      + deScore * 0.2
-      + fcfScore * 0.2
-      + clamp(input.governanceScore, 0, 100) * 0.15
-      + clamp(input.moatScore, 0, 100) * 0.2,
-  )
-}
-
-function computeRedFlags(input: FormState): {
-  blocked: boolean
-  scorePenalty: number
-  flags: string[]
-} {
-  const flags: string[] = []
-  if (input.ocfToNi3yAvg > 0 && input.ocfToNi3yAvg < 0.7) {
-    flags.push('经营性现金流/净利润连续3年低于0.7')
-  }
-  if (input.goodwillToEquity > 30) {
-    flags.push('商誉/净资产超过30%')
-  }
-  if (input.otherReceivablesToEquity > 20) {
-    flags.push('其他应收款/净资产超过20%')
-  }
-  if (input.inventoryTurnoverTrend < -10 && input.arTurnoverTrend < -10) {
-    flags.push('存货与应收账款周转率持续恶化')
-  }
-
-  const blocked = flags.length > 0
-  const scorePenalty = blocked ? Math.min(35, flags.length * 12) : 0
-  return { blocked, scorePenalty, flags }
-}
-
-function computeDataCoverage(input: FormState): {
-  score: number
-  level: 'high' | 'medium' | 'low'
-  missingCoreFields: string[]
-} {
-  const missingCoreFields = DATA_COVERAGE_CHECKS
-    .filter((c) => Number(input[c.key]) <= 0)
-    .map((c) => c.label)
-  const score = Math.round(((DATA_COVERAGE_CHECKS.length - missingCoreFields.length) / DATA_COVERAGE_CHECKS.length) * 100)
-  const level = score >= 80 ? 'high' as const : score >= 55 ? 'medium' as const : 'low' as const
-  return { score, level, missingCoreFields }
+function isGrowthBoardTicker(ticker: string): boolean {
+  const normalized = ticker.trim().toUpperCase()
+  return normalized.startsWith('300') || normalized.startsWith('688')
 }
 
 function computeValuationRange(
@@ -153,51 +64,6 @@ function computeValuationRange(
   }
 }
 
-function collectWarnings(args: {
-  dcf: ModelResult
-  roepb: ModelResult
-  rel: ModelResult
-  grh: ModelResult
-  cape: ModelResult
-  fcfev: ModelResult
-  sotp: ModelResult
-  qualityScore: number
-  confidence: number
-  industryName: string
-  dataCoverage: ReturnType<typeof computeDataCoverage>
-  redFlags: ReturnType<typeof computeRedFlags>
-}): string[] {
-  function appendModelWarning(label: string, model: ModelResult, enabled = true): void {
-    if (enabled && !model.valid) {
-      warnings.push(`${label} 未采用：${model.reason}`)
-    }
-  }
-
-  const warnings: string[] = []
-  const { dcf, roepb, rel, grh, cape, fcfev, sotp, qualityScore, confidence, industryName, dataCoverage, redFlags } = args
-
-  appendModelWarning('DCF', dcf)
-  appendModelWarning('ROE-PB', roepb)
-  appendModelWarning('相对估值', rel)
-  appendModelWarning('Graham 公式', grh)
-  appendModelWarning('CAPE', cape, industryName === '强周期')
-  appendModelWarning('FCF/EV', fcfev, industryName === '重资产基建')
-  appendModelWarning('SOTP', sotp, industryName === '科技/平台')
-  if (qualityScore < 60) warnings.push('质量评分偏低：建议提高安全边际阈值。')
-  if (confidence < 0.6) warnings.push('置信度偏低：建议补充数据后再评估。')
-  if (dataCoverage.level === 'low') {
-    warnings.push(`数据充分度偏低（${dataCoverage.score}%）：${dataCoverage.missingCoreFields.slice(0, 4).join('、')} 等关键字段缺失。`)
-  }
-  if (redFlags.blocked) {
-    warnings.push('触发硬性财务红旗：不建议长期持有。')
-    for (const flag of redFlags.flags) {
-      warnings.push(`红旗：${flag}`)
-    }
-  }
-  if (!warnings.length) warnings.push('无明显模型警告，但仍需结合行业与治理实地研究。')
-
-  return warnings
-}
 
 function buildPercentileCloud(input: FormState): AnalysisResult['percentileCloud'] {
   return [
@@ -219,7 +85,7 @@ function buildPercentileCloud(input: FormState): AnalysisResult['percentileCloud
   ]
 }
 
-function buildThermometer(input: FormState): AnalysisResult['thermometer'] {
+function buildThermometer(input: FormState): NonNullable<AnalysisResult['thermometer']> {
   const spread = input.csi300EarningsYield > 0
     ? input.csi300EarningsYield - input.cn10yYield
     : 0
@@ -261,49 +127,14 @@ function computeSafetyScore(conservativeMarginSafety: number): number {
   return Math.round(clamp(50 + conservativeMarginSafety * 120, 0, 100))
 }
 
-function computeConfidenceAdjusted(
-  confidence: number,
-  redFlags: ReturnType<typeof computeRedFlags>,
+function computeMarketCycleAdjustment(
+  thermometer: NonNullable<AnalysisResult['thermometer']>,
 ): number {
-  return clamp(
-    confidence * (redFlags.blocked ? 0.55 : 1) * (1 - redFlags.scorePenalty / 200),
-    0.05,
-    0.98,
-  )
+  if (thermometer.zScore >= 2 || thermometer.spread >= 3) return 10
+  if (thermometer.zScore <= -2 || thermometer.spread <= 1.5) return -10
+  return 0
 }
 
-export function aggregate(
-  models: ModelResult[],
-  qualityScore: number,
-  customWeights?: ModelWeights,
-): { value: number; confidence: number; modelsWithContribution: ModelResult[] } {
-  const valid = models.filter(isUsableModel)
-  if (!valid.length) return { value: 0, confidence: 0, modelsWithContribution: models }
-
-  const weights = customWeights || MODEL_WEIGHTS
-  const usedWeight = valid.reduce((sum, m) => sum + getWeight(weights, m.key), 0)
-  if (usedWeight <= 0) return { value: 0, confidence: 0, modelsWithContribution: models }
-
-  const value = valid.reduce((sum, m) => {
-    const w = getWeight(weights, m.key) / usedWeight
-    return sum + m.value * w
-  }, 0)
-
-  // Annotate each model with its effective weight and contribution
-  const modelsWithContribution: ModelResult[] = models.map((m) => {
-    if (!isUsableModel(m)) return m
-    const effectiveWeight = getWeight(weights, m.key) / usedWeight
-    return {
-      ...m,
-      weight: effectiveWeight,
-      contribution: m.value * effectiveWeight,
-    }
-  })
-
-  const modelConf = valid.reduce((sum, m) => sum + (m.confidence || 0), 0) / valid.length
-  const confidence = clamp(modelConf * (0.7 + (qualityScore / 100) * 0.3), 0.1, 0.98)
-  return { value, confidence, modelsWithContribution }
-}
 
 export function analyze(input: FormState): AnalysisResult {
   input = normalizeInput(input)
@@ -319,6 +150,7 @@ export function analyze(input: FormState): AnalysisResult {
   const marginSafety = computeMarginSafety(input.price, base.value)
   const conservativeMarginSafety = computeMarginSafety(input.price, conservativeValue)
   const warnings = collectWarnings({
+    input,
     dcf,
     roepb,
     rel,
@@ -338,9 +170,40 @@ export function analyze(input: FormState): AnalysisResult {
 
   const percentileCloud = buildPercentileCloud(input)
   const thermometer = buildThermometer(input)
+  const marketCycleAdjustment = computeMarketCycleAdjustment(thermometer)
+  const marketCapYi = input.price > 0 && input.sharesOutstanding > 0 ? input.price * input.sharesOutstanding : 0
+  const isGrowthBoard = input.isGrowthBoard > 0 || isGrowthBoardTicker(input.ticker)
+  const growthBoardHighRisk = isGrowthBoard && marketCapYi > 0 && marketCapYi < 100 && input.eps <= 0
+  const conformanceChecks = buildConformanceChecks({ input, redFlags, growthBoardHighRisk, marketCycleAdjustment })
 
-  const safetyScore = computeSafetyScore(conservativeMarginSafety)
-  const confidenceAdjusted = computeConfidenceAdjusted(base.confidence, redFlags)
+  const compositeNormalizedScore = computeCompositeNormalizedScore(input, base.modelsWithContribution, industryProfile.weights, roepb)
+  const baseSafetyScore = Math.round(
+    clamp(
+      compositeNormalizedScore ?? computeSafetyScore(conservativeMarginSafety),
+      0,
+      100,
+    ),
+  )
+  const adjustedSafetyScore = clamp(baseSafetyScore + marketCycleAdjustment, 0, 100)
+  const safetyScore = redFlags.blocked
+    ? 0
+    : input.isST > 0
+      ? Math.min(30, adjustedSafetyScore)
+      : growthBoardHighRisk
+        ? Math.min(40, adjustedSafetyScore)
+        : adjustedSafetyScore
+  const confidenceAdjusted = computeConfidenceAdjusted(base.confidence, input, redFlags)
+
+  if (!redFlags.blocked && marketCycleAdjustment !== 0) {
+    warnings.push(
+      marketCycleAdjustment > 0
+        ? '市场温度偏冷：已按股债利差规则上调综合分数 +10。'
+        : '市场温度偏热：已按股债利差规则下调综合分数 -10。',
+    )
+  }
+  if (!redFlags.blocked && growthBoardHighRisk) {
+    warnings.push('创业板/科创板小市值且未盈利：已限制安全评分上限并降低估值可信度。')
+  }
 
   return {
     intrinsicValue: base.value,
@@ -364,7 +227,9 @@ export function analyze(input: FormState): AnalysisResult {
     longTermReturn,
     percentileCloud,
     thermometer,
+    marketCycleAdjustment,
     dataCoverage,
+    conformanceChecks,
   }
 }
 

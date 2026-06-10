@@ -1,5 +1,10 @@
 export type FormState = {
   ticker: string
+  isST: number
+  isGrowthBoard: number
+  isPolicySensitive: number
+  isFinancialSector: number
+  listedYears: number
   price: number
   fcf0: number
   forecastYears: number
@@ -25,6 +30,10 @@ export type FormState = {
   ocfToNi3yAvg: number
   goodwillToEquity: number
   otherReceivablesToEquity: number
+  relatedPartySalesToRevenue: number
+  externalGuaranteeToEquity: number
+  inventoryTurnoverDays: number
+  arTurnoverDays: number
   inventoryTurnoverTrend: number
   arTurnoverTrend: number
   csi300EarningsYield: number
@@ -69,6 +78,7 @@ export type ModelResult = {
 
 export type RedFlagResult = {
   blocked: boolean
+  hardReject: boolean
   scorePenalty: number
   flags: string[]
 }
@@ -99,6 +109,13 @@ export type DataCoverage = {
   missingCoreFields: string[]
 }
 
+export type ConformanceCheck = {
+  key: string
+  label: string
+  status: 'on' | 'off' | 'warn' | 'block'
+  detail?: string
+}
+
 export type AnalysisResult = {
   intrinsicValue: number
   intrinsicRange?: {
@@ -121,7 +138,9 @@ export type AnalysisResult = {
   longTermReturn?: LongTermReturnBreakdown
   percentileCloud?: PercentileCloudPoint[]
   thermometer?: ValuationThermometer
+  marketCycleAdjustment?: number
   dataCoverage?: DataCoverage
+  conformanceChecks?: ConformanceCheck[]
 }
 
 export type FieldSource = 'auto' | 'derived' | 'default' | 'manual'

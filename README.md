@@ -8,6 +8,7 @@ A股长期价值投资理念 + 股票价值评估工具。
 - 估值模型：DCF、ROE-PB、相对估值（PE/PB/PCF/PEG）、CAPE、FCF/EV、SOTP、Graham 公式
 - 质量评分：ROIC、杠杆、现金流转化、治理、护城河
 - 结果输出：内在价值区间、安全边际、模型分项、敏感性分析、风险提示、数据完整度
+- 规范对齐：ST/上市年限/成长板/政策敏感/金融口径/红旗状态可视化检查
 - 估值页交互：总览优先 + 分系统 Tab（DCF、ROE-PB、相对估值、CAPE/现金回报、SOTP、风险与验证）
 - TuShare 适配层：代理访问、字段映射、缓存、日志
 - 股票历史页：复用历史查询记录、名称/代码搜索、添加快照、按规则更新数据
@@ -31,8 +32,8 @@ A股长期价值投资理念 + 股票价值评估工具。
 - `src/App.tsx`：估值页、股票历史页、历史复盘页
 - `src/types.ts`：类型定义
 - `src/data/defaults.ts`：默认参数
-- `src/lib/valuation.ts`：估值引擎
-- `src/lib/tushare.ts`：TuShare 适配层
+- `src/lib/valuation/`：估值引擎与模型实现
+- `src/lib/tushare/`：TuShare 适配层与加载管线
 - `src/lib/searchHistoryStore.ts`：股票历史存储
 - `src/lib/snapshotStore.ts`：快照存储
 - `src/lib/backtest.ts`：回测与归因

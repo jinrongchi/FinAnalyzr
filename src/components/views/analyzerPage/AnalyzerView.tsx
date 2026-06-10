@@ -1,11 +1,12 @@
 import type { ChangeEvent } from 'react'
 import { useMemo, useState } from 'react'
-import { NumberField } from '../NumberField'
-import { formatMaybePct, formatMaybeYuan } from '../../lib/displayFormat'
-import { buildSnapshotName } from '../../lib/historyDate'
-import { formatPct } from '../../lib/valuation'
-import type { AnalysisResult, FieldNotes, FieldSources, FormState, ModelResult } from '../../types'
+import { NumberField } from '../../NumberField'
+import { formatMaybePct, formatMaybeYuan } from '../../../lib/displayFormat'
+import { buildSnapshotName } from '../../../lib/historyDate'
+import { formatPct } from '../../../lib/valuation/index'
+import type { AnalysisResult, FieldNotes, FieldSources, FormState, ModelResult } from '../../../types'
 import { ANALYZER_TABS, capeMethodFor, formulaFor, type AnalyzerTab } from './analyzerMeta'
+import { completenessCount, marginSafetyClass, spreadPercentileFromZ, warningLabel, warningSeverity } from './analyzerHelpers'
 
 type AnalyzerViewProps = {
   form: FormState
@@ -28,15 +29,6 @@ type AnalyzerViewProps = {
   onSnapshotDraftNameChange: (value: string) => void
   onSnapshotDraftTagsChange: (value: string) => void
   onSaveSnapshot: () => void
-}
-
-function completenessCount(form: FormState): { filled: number; total: number } {
-  const numericKeys = Object.keys(form).filter((k) => k !== 'ticker') as Array<keyof FormState>
-  const filled = numericKeys.filter((k) => {
-    const v = form[k]
-    return typeof v === 'number' ? v !== 0 : Boolean(v)
-  }).length
-  return { filled, total: numericKeys.length }
 }
 
 function Section({
@@ -63,13 +55,6 @@ function Section({
       {open ? <div className="section-content">{children}</div> : null}
     </div>
   )
-}
-
-function marginSafetyClass(m: number): string {
-  if (m >= 0.3) return 'ms-great'
-  if (m >= 0.1) return 'ms-good'
-  if (m >= 0) return 'ms-neutral'
-  return 'ms-bad'
 }
 
 function ModelBox({ model }: { model?: ModelResult }) {
@@ -181,9 +166,34 @@ export function AnalyzerView(props: AnalyzerViewProps) {
             <div className="item"><div>结果置信度</div><div className="v">{formatPct(props.result.confidence)}</div></div>
             <div className="item"><div>质量评分</div><div className="v">{props.result.qualityScore}</div></div>
             {props.result.safetyScore !== undefined ? <div className="item"><div>安全边际评分</div><div className="v">{props.result.safetyScore}</div></div> : null}
+            {props.result.marketCycleAdjustment !== undefined ? <div className="item"><div>市场周期修正</div><div className="v">{props.result.marketCycleAdjustment > 0 ? `+${props.result.marketCycleAdjustment}` : props.result.marketCycleAdjustment}</div></div> : null}
             {props.result.dataCoverage ? <div className="item"><div>数据充分度</div><div className="v">{props.result.dataCoverage.score} ({props.result.dataCoverage.level === 'high' ? '高' : props.result.dataCoverage.level === 'medium' ? '中' : '低'})</div></div> : null}
             {capeMethod ? <div className="item" title={capeNote || 'CAPE 数据口径'}><div>CAPE口径</div><div className="v">{capeMethod}</div></div> : null}
           </div>
+          {props.result.longTermReturn ? (
+            <div className="kpi expected-return-kpi">
+              <div className="item"><div>长期回报(总)</div><div className="v">{formatMaybePct(props.result.longTermReturn.annualTotal)}</div></div>
+              <div className="item"><div>分红贡献</div><div className="v">{formatMaybePct(props.result.longTermReturn.annualDividend)}</div></div>
+              <div className="item"><div>增长贡献</div><div className="v">{formatMaybePct(props.result.longTermReturn.annualGrowth)}</div></div>
+              <div className="item"><div>估值回归贡献</div><div className="v">{formatMaybePct(props.result.longTermReturn.annualValuationChange)}</div></div>
+            </div>
+          ) : null}
+          {props.result.conformanceChecks?.length ? (
+            <div className="conformance-panel">
+              <div className="conformance-title">规范对齐检查</div>
+              <div className="conformance-list">
+                {props.result.conformanceChecks.map((c) => (
+                  <div key={c.key} className={`conformance-item conformance-item--${c.status}`}>
+                    <div className="conformance-head">
+                      <span>{c.label}</span>
+                      <span className="conformance-badge">{c.status === 'block' ? '阻断' : c.status === 'warn' ? '预警' : c.status === 'on' ? '启用' : '未触发'}</span>
+                    </div>
+                    {c.detail ? <div className="conformance-detail">{c.detail}</div> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="system-tabs" role="tablist" aria-label="估值系统切换">
@@ -341,9 +351,18 @@ export function AnalyzerView(props: AnalyzerViewProps) {
               <div>
                 <h3>风险过滤与验证参数</h3>
                 <div className="form-grid">
+                  <NumberField label="ST标记（1是/0否）" name="isST" min={0} max={1} step={1} value={props.form.isST} emptyIfZero source={fs.isST} helperFormula={formulaFor('isST')} onChange={props.onUpdateField} />
+                  <NumberField label="成长板标记（1是/0否）" name="isGrowthBoard" min={0} max={1} step={1} value={props.form.isGrowthBoard} emptyIfZero source={fs.isGrowthBoard} helperFormula={formulaFor('isGrowthBoard')} onChange={props.onUpdateField} />
+                  <NumberField label="政策敏感标记（1是/0否）" name="isPolicySensitive" min={0} max={1} step={1} value={props.form.isPolicySensitive} emptyIfZero source={fs.isPolicySensitive} helperFormula={formulaFor('isPolicySensitive')} onChange={props.onUpdateField} />
+                  <NumberField label="金融行业标记（1是/0否）" name="isFinancialSector" min={0} max={1} step={1} value={props.form.isFinancialSector} emptyIfZero source={fs.isFinancialSector} helperFormula={formulaFor('isFinancialSector')} onChange={props.onUpdateField} />
+                  <NumberField label="上市年限（年）" name="listedYears" step={0.1} value={props.form.listedYears} emptyIfZero source={fs.listedYears} helperFormula={formulaFor('listedYears')} onChange={props.onUpdateField} />
                   <NumberField label="近3年OCF/NI均值" name="ocfToNi3yAvg" step={0.01} value={props.form.ocfToNi3yAvg} emptyIfZero source={fs.ocfToNi3yAvg} helperFormula={formulaFor('ocfToNi3yAvg')} onChange={props.onUpdateField} />
                   <NumberField label="商誉/净资产（%）" name="goodwillToEquity" step={0.1} value={props.form.goodwillToEquity} emptyIfZero source={fs.goodwillToEquity} helperFormula={formulaFor('goodwillToEquity')} onChange={props.onUpdateField} />
                   <NumberField label="其他应收款/净资产（%）" name="otherReceivablesToEquity" step={0.1} value={props.form.otherReceivablesToEquity} emptyIfZero source={fs.otherReceivablesToEquity} helperFormula={formulaFor('otherReceivablesToEquity')} onChange={props.onUpdateField} />
+                  <NumberField label="关联方销售/营收（%）" name="relatedPartySalesToRevenue" step={0.1} value={props.form.relatedPartySalesToRevenue} emptyIfZero source={fs.relatedPartySalesToRevenue} helperFormula={formulaFor('relatedPartySalesToRevenue')} onChange={props.onUpdateField} />
+                  <NumberField label="对外担保/净资产（%）" name="externalGuaranteeToEquity" step={0.1} value={props.form.externalGuaranteeToEquity} emptyIfZero source={fs.externalGuaranteeToEquity} helperFormula={formulaFor('externalGuaranteeToEquity')} onChange={props.onUpdateField} />
+                  <NumberField label="存货周转天数" name="inventoryTurnoverDays" step={0.1} value={props.form.inventoryTurnoverDays} emptyIfZero source={fs.inventoryTurnoverDays} helperFormula={formulaFor('inventoryTurnoverDays')} onChange={props.onUpdateField} />
+                  <NumberField label="应收周转天数" name="arTurnoverDays" step={0.1} value={props.form.arTurnoverDays} emptyIfZero source={fs.arTurnoverDays} helperFormula={formulaFor('arTurnoverDays')} onChange={props.onUpdateField} />
                   <NumberField label="存货周转率变化（%）" name="inventoryTurnoverTrend" step={0.1} value={props.form.inventoryTurnoverTrend} emptyIfZero source={fs.inventoryTurnoverTrend} helperFormula={formulaFor('inventoryTurnoverTrend')} onChange={props.onUpdateField} />
                   <NumberField label="应收周转率变化（%）" name="arTurnoverTrend" step={0.1} value={props.form.arTurnoverTrend} emptyIfZero source={fs.arTurnoverTrend} helperFormula={formulaFor('arTurnoverTrend')} onChange={props.onUpdateField} />
                   <NumberField label="ROIC（%）" name="roic" value={props.form.roic} emptyIfZero source={fs.roic} helperText={helperFor('roic')} helperFormula={formulaFor('roic')} onChange={props.onUpdateField} />
@@ -363,8 +382,28 @@ export function AnalyzerView(props: AnalyzerViewProps) {
                     <div className="item"><div>估值温度</div><div className="v">{props.result.thermometer.status === 'cold' ? '偏冷(性价比高)' : props.result.thermometer.status === 'hot' ? '偏热(性价比低)' : '中性'}</div></div>
                   </div>
                 ) : null}
+                {props.result.thermometer ? (
+                  <p className="sub thermometer-context">
+                    当前股债利差约处历史 {spreadPercentileFromZ(props.result.thermometer.zScore)} 分位。
+                    {props.result.thermometer.status === 'cold' ? ' 市场偏冷，系统倾向提高安全评分。' : props.result.thermometer.status === 'hot' ? ' 市场偏热，系统倾向降低安全评分。' : ' 市场处于中性区间。'}
+                  </p>
+                ) : null}
+                {props.result.dataCoverage?.missingCoreFields?.length ? (
+                  <div className="warn-item warn-item--info">
+                    <div className="warn-badge">缺失字段</div>
+                    <div>{props.result.dataCoverage.missingCoreFields.join('、')}</div>
+                  </div>
+                ) : null}
                 <div className="warnings">
-                  {props.result.warnings.map((w) => <div key={w} className="warn-item">{w}</div>)}
+                  {props.result.warnings.map((w) => {
+                    const level = warningSeverity(w)
+                    return (
+                      <div key={w} className={`warn-item warn-item--${level}`}>
+                        <div className={`warn-badge warn-badge--${level}`}>{warningLabel(level)}</div>
+                        <div>{w}</div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </div>

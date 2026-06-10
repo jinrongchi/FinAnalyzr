@@ -2,15 +2,30 @@ import type { FormState, ModelResult } from '../../types'
 import { MODEL_WEIGHTS, SENSITIVITY_SCENARIOS } from './config'
 import { averagePositive, clamp } from './utils'
 
+function detectInfraAssetHeavy(input: FormState): boolean {
+  if (input.industryOverride === 4) return true
+  const dividendYield = input.price > 0 ? input.dividend0 / input.price : 0
+  return dividendYield >= 0.03 && input.fcf0 > 0 && input.fcfGrowth < 6
+}
+
+function resolveDcfGrowth(input: FormState): { phase1: number; phase2: number } {
+  const phase1Cap = detectInfraAssetHeavy(input) ? 10 : 15
+  const phase1 = clamp(input.fcfGrowth * 0.7, -20, phase1Cap)
+  const phase2 = clamp(phase1 * 0.55, -15, 8)
+  return { phase1, phase2 }
+}
+
 function dcfValueWithParams(
   input: FormState,
   discountRate: number,
   growthPhase1: number,
   growthPhase2: number,
   terminalMultiple: number,
-): number {
+): { valuePerShare: number; terminalShare: number } {
   const r = discountRate / 100
-  if (r <= 0 || input.sharesOutstanding <= 0) return 0
+  if (r <= 0 || input.sharesOutstanding <= 0) {
+    return { valuePerShare: 0, terminalShare: 0 }
+  }
 
   let fcf = input.fcf0
   let pv = 0
@@ -25,8 +40,45 @@ function dcfValueWithParams(
 
   const terminalValue = Math.max(0, fcf) * terminalMultiple
   const terminalPv = terminalValue / (1 + r) ** years
+  const totalPv = pv + terminalPv
+  const terminalShare = totalPv > 0 ? terminalPv / totalPv : 0
   const equity = pv + terminalPv - input.netDebt
-  return equity / input.sharesOutstanding
+  return {
+    valuePerShare: equity / input.sharesOutstanding,
+    terminalShare,
+  }
+}
+
+function runDcfScenarioWithGuardrail(
+  input: FormState,
+  discountRate: number,
+  growthPhase1: number,
+  growthPhase2: number,
+  terminalMultiple: number,
+): {
+  valuePerShare: number
+  terminalShare: number
+  terminalMultiple: number
+  guardrailApplied: boolean
+} {
+  let multiple = terminalMultiple
+  let computed = dcfValueWithParams(input, discountRate, growthPhase1, growthPhase2, multiple)
+  let guardrailApplied = false
+  let step = 0
+
+  while (computed.terminalShare > 0.7 && multiple > 8 && step < 10) {
+    guardrailApplied = true
+    multiple -= 1
+    computed = dcfValueWithParams(input, discountRate, growthPhase1, growthPhase2, multiple)
+    step += 1
+  }
+
+  return {
+    valuePerShare: computed.valuePerShare,
+    terminalShare: computed.terminalShare,
+    terminalMultiple: multiple,
+    guardrailApplied,
+  }
 }
 
 export function computeDCF(input: FormState): ModelResult {
@@ -41,12 +93,15 @@ export function computeDCF(input: FormState): ModelResult {
     return { key: 'DCF', name: 'DCF', valid: false, reason: 'FCF 为负且增长率非正，无法在预测期内转正' }
   }
 
-  const baseG1 = input.fcfGrowth
-  const baseG2 = input.fcfGrowth * 0.55
+  const { phase1: baseG1, phase2: baseG2 } = resolveDcfGrowth(input)
 
-  const bear = dcfValueWithParams(input, input.discountRate + 1.2, baseG1 - 3, baseG2 - 2, 15)
-  const base = dcfValueWithParams(input, input.discountRate, baseG1, baseG2, 18)
-  const bull = dcfValueWithParams(input, Math.max(1, input.discountRate - 1), baseG1 + 2, baseG2 + 1, 20)
+  const bearCase = runDcfScenarioWithGuardrail(input, input.discountRate + 1.2, baseG1 - 3, baseG2 - 2, 15)
+  const baseCase = runDcfScenarioWithGuardrail(input, input.discountRate, baseG1, baseG2, 18)
+  const bullCase = runDcfScenarioWithGuardrail(input, Math.max(1, input.discountRate - 1), baseG1 + 2, baseG2 + 1, 20)
+
+  const bear = bearCase.valuePerShare
+  const base = baseCase.valuePerShare
+  const bull = bullCase.valuePerShare
 
   if (base <= 0) {
     return { key: 'DCF', name: 'DCF', valid: false, reason: '估值结果无效，请检查FCF与折现参数' }
@@ -60,26 +115,28 @@ export function computeDCF(input: FormState): ModelResult {
     confidence: input.fcf0 < 0 ? 0.65 : 0.85,
     weight: MODEL_WEIGHTS.DCF,
     range: { bear, base, bull },
-    assumptions: `10年分段DCF, r=${input.discountRate.toFixed(1)}%, g1=${baseG1.toFixed(1)}%, g2=${baseG2.toFixed(1)}%, 终值倍数18x`,
+    assumptions: `10年分段DCF, r=${input.discountRate.toFixed(1)}%, g1=${baseG1.toFixed(1)}%, g2=${baseG2.toFixed(1)}%, 终值倍数${baseCase.terminalMultiple}x, TV占比=${(baseCase.terminalShare * 100).toFixed(1)}%${baseCase.guardrailApplied ? '（已触发TV<=70%约束）' : ''}`,
   }
 }
 
 export function computeROEPB(input: FormState): ModelResult {
-  const roe = input.bvps > 0 ? input.eps / input.bvps : 0
+  const currentRoe = input.bvps > 0 ? input.eps / input.bvps : 0
+  const roicProxy = input.roic > 0 ? input.roic / 100 : currentRoe
+  const sustainableRoe = Math.min(currentRoe, roicProxy)
   const r = input.discountRate / 100
   const g = Math.max(0, input.terminalGrowth / 100)
 
-  if (input.bvps <= 0 || r <= g || roe <= 0) {
+  if (input.bvps <= 0 || r <= g || sustainableRoe <= 0) {
     return { key: 'ROEPB', name: 'ROE-PB', valid: false, reason: 'ROE-PB 所需参数不足（需EPS、BVPS且 r > g）' }
   }
 
-  const fairPb = (roe - g) / (r - g)
+  const fairPb = (sustainableRoe - g) / (r - g)
   if (!Number.isFinite(fairPb) || fairPb <= 0) {
     return { key: 'ROEPB', name: 'ROE-PB', valid: false, reason: '合理PB计算结果无效' }
   }
 
   const value = fairPb * input.bvps
-  const stabilityBoost = clamp((roe * 100 - 8) / 12, 0, 1)
+  const stabilityBoost = clamp((sustainableRoe * 100 - 8) / 12, 0, 1)
   return {
     key: 'ROEPB',
     name: 'ROE-PB',
@@ -87,7 +144,7 @@ export function computeROEPB(input: FormState): ModelResult {
     value,
     confidence: clamp(0.55 + stabilityBoost * 0.3, 0.55, 0.9),
     weight: MODEL_WEIGHTS.ROEPB,
-    assumptions: `PB*=(${(roe * 100).toFixed(1)}%-${(g * 100).toFixed(1)}%)/(${(r * 100).toFixed(1)}%-${(g * 100).toFixed(1)}%)=${fairPb.toFixed(2)}x`,
+    assumptions: `PB*=(${(sustainableRoe * 100).toFixed(1)}%-${(g * 100).toFixed(1)}%)/(${(r * 100).toFixed(1)}%-${(g * 100).toFixed(1)}%)=${fairPb.toFixed(2)}x（ROE_s=min(ROE,ROIC)）`,
   }
 }
 

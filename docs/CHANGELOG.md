@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented here.
 
+## 2026-06-10
+
+### Added
+
+- China A-share risk controls and conformance instrumentation:
+  - Added ST、上市年限、成长板、政策敏感、金融行业等风险标签联动。
+  - Added growth-board discount-rate uplift on CAPM-derived discount rates.
+  - Added conformance check panel in analyzer output for auditability.
+- Valuation hardening:
+  - Added DCF terminal-value share guardrail and explicit assumption output.
+  - Added explicit normalized composite safety score mapping across model outputs.
+  - Added dividend sustainability checks (high payout and weak cash support warnings).
+  - Added day-based operations deterioration check using AR/Inventory turnover-day trend.
+  - Added optional related-party sales ratio and external guarantee ratio red-flag thresholds.
+
+### Changed
+
+- Data ingestion and derivation:
+  - `stock_basic` ingestion extended and now drives automatic industry template mapping.
+  - `balancesheet` ingestion now includes `notes_receiv` for richer receivable context.
+  - Turnover metrics now derive turnover-days and 3-year day-trend percentages.
+- Dashboard UX:
+  - Added expected return decomposition and thermometer context explanation.
+  - Warning cards now use severity badges and include missing-field detail blocks.
+
+### Fixed
+
+- Fixed warning pipeline regression (`collectWarnings` input wiring) and hardened tests.
+- Fixed strict null-safety edge in CPI fallback parsing.
+
+### Tests
+
+- Expanded valuation and TuShare unit tests to cover:
+  - ST/IPO/board/policy/financial exceptions
+  - market-cycle adjustment
+  - DCF guardrail behavior
+  - dividend sustainability flags
+  - turnover-day deterioration thresholds
+
 ## 2026-06-09
 
 ### Added

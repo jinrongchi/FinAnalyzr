@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { upsertSearchHistory, removeSearchHistory, loadSearchHistory } from './searchHistoryStore'
+import { DEFAULT_FORM } from '../data/defaults'
 import type { FormState } from '../types'
 
 // Mock storage
@@ -17,6 +18,7 @@ beforeEach(() => {
 })
 
 const baseForm: FormState = {
+  ...DEFAULT_FORM,
   ticker: 'AAPL',
   price: 150,
   fcf0: 100,
@@ -40,31 +42,6 @@ const baseForm: FormState = {
   governanceScore: 8,
   moatScore: 8,
   ocfToNi3yAvg: 1,
-  goodwillToEquity: 0,
-  otherReceivablesToEquity: 0,
-  inventoryTurnoverTrend: 0,
-  arTurnoverTrend: 0,
-  csi300EarningsYield: 0,
-  cn10yYield: 0,
-  peg: 0,
-  cape: 0,
-  pcf: 0,
-  pePercentile5y: 0,
-  pbPercentile5y: 0,
-  pcfPercentile5y: 0,
-  pePercentile10y: 0,
-  pbPercentile10y: 0,
-  pcfPercentile10y: 0,
-  fcfYield: 0,
-  industryOverride: 0,
-  sotpPerShare: 0,
-  sotpSegmentCorePerShare: 0,
-  sotpSegmentGrowthPerShare: 0,
-  sotpSegmentInvestmentPerShare: 0,
-  sotpSegmentNetCashPerShare: 0,
-  rndCapitalizationAdjPerShare: 0,
-  equityBondSpreadMean10y: 0,
-  equityBondSpreadStd10y: 0,
 }
 
 describe('searchHistoryStore - Deduplication & Timestamps', () => {

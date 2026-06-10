@@ -50,9 +50,10 @@ function migrateEntry(entry: LegacyHistoryEntry): { entry: SearchHistoryEntry | 
   if (entry.fetchedAt && !entry.updatedAt) {
     return {
       entry: {
-        ...entry,
         id: entry.ticker, // Convert old compound ID to ticker-only ID
+        ticker: entry.ticker,
         stockName: entry.stockName || entry.ticker,
+        sourceTradeDate: entry.sourceTradeDate,
         createdAt: entry.fetchedAt,
         updatedAt: entry.fetchedAt,
         form: normalizeForm(entry.form),
@@ -65,9 +66,10 @@ function migrateEntry(entry: LegacyHistoryEntry): { entry: SearchHistoryEntry | 
   const now = new Date().toISOString()
   return {
     entry: {
-      ...entry,
       id: entry.ticker,
+      ticker: entry.ticker,
       stockName: entry.stockName || entry.ticker,
+      sourceTradeDate: entry.sourceTradeDate,
       createdAt: entry.createdAt || entry.fetchedAt || now,
       updatedAt: entry.updatedAt || entry.fetchedAt || now,
       form: normalizeForm(entry.form),
