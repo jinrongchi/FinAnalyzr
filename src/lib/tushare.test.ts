@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_FORM } from '../data/defaults'
-import { loadFromTushare } from './tushare'
+import { loadFromTushare } from './tushare/index'
 
 type ProxyResponse = {
   code: number

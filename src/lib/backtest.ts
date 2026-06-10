@@ -4,7 +4,7 @@ import type {
   FormState,
   Snapshot,
 } from '../types'
-import { analyze } from './valuation'
+import { analyze } from './valuation/index'
 
 type AttributionField = { key: keyof FormState; label: string }
 

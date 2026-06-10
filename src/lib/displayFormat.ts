@@ -1,4 +1,4 @@
-import { formatPct, formatYuan } from './valuation'
+import { formatPct, formatYuan } from './valuation/index'
 
 export function formatMaybeYuan(value: number): string {
   return value === 0 ? 'N/A' : formatYuan(value)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_FORM } from '../data/defaults'
 import type { Snapshot } from '../types'
-import { analyze } from './valuation'
+import { analyze } from './valuation/index'
 import { buildBacktestSeries, computeAssumptionAttribution } from './backtest'
 
 const VALID_FORM = {

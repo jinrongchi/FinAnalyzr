@@ -4,6 +4,7 @@ import { HistoryView } from './components/views/HistoryView'
 import { ReviewView } from './components/views/ReviewView'
 import { useAnalyzerForm } from './hooks/useAnalyzerForm'
 import { useAppViewState } from './hooks/useAppViewState'
+import { useFieldMetadata } from './hooks/useFieldMetadata'
 import { useHistoryActions } from './hooks/useHistoryActions'
 import { useSearchHistory } from './hooks/useSearchHistory'
 import { useSnapshots } from './hooks/useSnapshots'
@@ -14,15 +15,17 @@ import { ATTRIBUTION_FIELDS } from './lib/comparisonFields'
 import { buildSnapshotName } from './lib/historyDate'
 import { logger } from './lib/logger'
 import { analyze, grade } from './lib/valuation'
-import type { FieldNotes, FieldSources, FormState, SearchHistoryEntry } from './types'
-
-type ManualEditedFields = Partial<Record<keyof FormState, true>>
+import type { SearchHistoryEntry } from './types'
 
 function App() {
   const [historyItemFeedback, setHistoryItemFeedback] = useState<{ id: string; message: string; tone: 'success' | 'error' | 'info' } | null>(null)
-  const [fieldSources, setFieldSources] = useState<FieldSources>({})
-  const [fieldNotes, setFieldNotes] = useState<FieldNotes>({})
-  const [manualEditedFields, setManualEditedFields] = useState<ManualEditedFields>({})
+  const {
+    fieldSources,
+    fieldNotes,
+    clearFieldMetadata,
+    applySyncedMetadata,
+    markManualField,
+  } = useFieldMetadata()
 
   const {
     searchHistory,
@@ -94,9 +97,7 @@ function App() {
   } = useAnalyzerForm(() => {
     resetForTickerChange()
     resetCurrentStockContext()
-    setFieldSources({})
-    setFieldNotes({})
-    setManualEditedFields({})
+    clearFieldMetadata()
   })
   const {
     handleRefreshHistoryItem,
@@ -119,11 +120,7 @@ function App() {
       }
       setView(nextView)
     },
-    clearFieldMetadata: () => {
-      setFieldSources({})
-      setFieldNotes({})
-      setManualEditedFields({})
-    },
+    clearFieldMetadata,
   })
 
   async function handleFetchTushare(forceRefresh = false): Promise<void> {
@@ -133,16 +130,7 @@ function App() {
 
     const { mergedForm, stockName, sourceTradeDate, fieldSources: sources, fieldNotes: notesByField } = synced.data
     setForm(mergedForm)
-    setFieldSources(() => {
-      const next = { ...(sources || {}) }
-      for (const key of Object.keys(manualEditedFields) as Array<keyof FormState>) {
-        if (manualEditedFields[key] && !next[key]) {
-          next[key] = 'manual'
-        }
-      }
-      return next
-    })
-    setFieldNotes(notesByField || {})
+    applySyncedMetadata(sources, notesByField)
     setSnapshotDraftName(buildSnapshotName(stockName, mergedForm.ticker, sourceTradeDate))
 
     saveHistoryEntry({
@@ -158,14 +146,7 @@ function App() {
     updateField(name, value)
     if (name === 'ticker') return
 
-    setManualEditedFields((prev) => ({ ...prev, [name]: true }))
-    setFieldSources((prev) => ({ ...prev, [name]: 'manual' }))
-    setFieldNotes((prev) => {
-      if (!prev[name]) return prev
-      const next = { ...prev }
-      delete next[name]
-      return next
-    })
+    markManualField(name)
   }
 
   const result = useMemo(() => analyze(form), [form])
@@ -264,7 +245,7 @@ function App() {
       resetForm()
       resetCurrentStockContext()
       setSyncStatus('')
-      setManualEditedFields({})
+      clearFieldMetadata()
     }
     switchView(nextView)
   }

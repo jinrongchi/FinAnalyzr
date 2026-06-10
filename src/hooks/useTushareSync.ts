@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { formatTradeDate } from '../lib/historyDate'
 import { logger } from '../lib/logger'
 import { loadTushareToken, persistTushareToken } from '../lib/tokenStore'
-import { getTushareHealthUrl, loadFromTushare } from '../lib/tushare'
+import { getTushareHealthUrl, loadFromTushare } from '../lib/tushare/index'
 import type { FieldNotes, FieldSources, FormState, SearchHistoryEntry } from '../types'
 
 type SyncResult = {

@@ -1,10 +1,11 @@
 import type { ChangeEvent } from 'react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NumberField } from '../NumberField'
 import { formatMaybePct, formatMaybeYuan } from '../../lib/displayFormat'
 import { buildSnapshotName } from '../../lib/historyDate'
 import { formatPct } from '../../lib/valuation'
 import type { AnalysisResult, FieldNotes, FieldSources, FormState, ModelResult } from '../../types'
+import { ANALYZER_TABS, capeMethodFor, formulaFor, type AnalyzerTab } from './analyzerMeta'
 
 type AnalyzerViewProps = {
   form: FormState
@@ -28,8 +29,6 @@ type AnalyzerViewProps = {
   onSnapshotDraftTagsChange: (value: string) => void
   onSaveSnapshot: () => void
 }
-
-type AnalyzerTab = 'dcf' | 'roepb' | 'relative' | 'cashflow' | 'sotp' | 'risk'
 
 function completenessCount(form: FormState): { filled: number; total: number } {
   const numericKeys = Object.keys(form).filter((k) => k !== 'ticker') as Array<keyof FormState>
@@ -73,10 +72,6 @@ function marginSafetyClass(m: number): string {
   return 'ms-bad'
 }
 
-function modelByKey(result: AnalysisResult, key: ModelResult['key']): ModelResult | undefined {
-  return result.models.find((m) => m.key === key)
-}
-
 function ModelBox({ model }: { model?: ModelResult }) {
   if (!model) return null
   return (
@@ -102,100 +97,35 @@ export function AnalyzerView(props: AnalyzerViewProps) {
   const [activeTab, setActiveTab] = useState<AnalyzerTab>('dcf')
   const { filled, total } = completenessCount(props.form)
   const completeness = Math.round((filled / total) * 100)
-  const { fs } = { fs: props.fieldSources }
-  const { fn } = { fn: props.fieldNotes }
+  const fs = props.fieldSources
+  const fn = props.fieldNotes
   const sotpSegmentSum =
     props.form.sotpSegmentCorePerShare
     + props.form.sotpSegmentGrowthPerShare
     + props.form.sotpSegmentInvestmentPerShare
     + props.form.sotpSegmentNetCashPerShare
 
-  const capeNote = props.fieldNotes.cape || ''
-  const capeMethod = (() => {
-    if (props.fieldSources.cape === 'manual') return '手工输入'
-    if (capeNote.includes('CPI不可用')) return '名义利润(降级)'
-    if (capeNote.includes('CPI均值')) return '通胀调整'
-    if (props.form.cape > 0) return '已提供'
-    return undefined
-  })()
+  const capeNote = fn.cape || ''
+  const capeMethod = capeMethodFor(props.form, fs, fn)
 
-  const dcfModel = modelByKey(props.result, 'DCF')
-  const roepbModel = modelByKey(props.result, 'ROEPB')
-  const relModel = modelByKey(props.result, 'REL')
-  const grhModel = modelByKey(props.result, 'GRH')
-  const capeModel = modelByKey(props.result, 'CAPE')
-  const fcfevModel = modelByKey(props.result, 'FCFEV')
-  const sotpModel = modelByKey(props.result, 'SOTP')
+  const modelMap = useMemo(() => {
+    const lookup: Partial<Record<ModelResult['key'], ModelResult>> = {}
+    for (const model of props.result.models) {
+      lookup[model.key] = model
+    }
+    return lookup
+  }, [props.result.models])
+
+  const dcfModel = modelMap.DCF
+  const roepbModel = modelMap.ROEPB
+  const relModel = modelMap.REL
+  const grhModel = modelMap.GRH
+  const capeModel = modelMap.CAPE
+  const fcfevModel = modelMap.FCFEV
+  const sotpModel = modelMap.SOTP
 
   function helperFor(field: keyof FormState): string | undefined {
-    if (field === 'industryPE' || field === 'industryPB') return undefined
     return fn[field]
-  }
-
-  function formulaFor(field: keyof FormState): string | undefined {
-    switch (field) {
-      case 'discountRate':
-        return 'CAPM: r = Rf + beta × ERP；当前默认 Rf=2.5%, ERP=6.5%'
-      case 'netDebt':
-        return '净负债 = 流动负债 + 非流动负债 - 货币资金（再换算为亿元）'
-      case 'deRatio':
-        return 'D/E = 资产负债率 / (1 - 资产负债率)'
-      case 'ebitdaPerShare':
-        return '每股EBITDA = EBITDA(万元) / 总股本(万股)；若缺失则按股价×15%近似'
-      case 'fcfGrowth':
-        return 'FCF增长率 = (本期FCF - 上期FCF) / 上期FCF × 100%'
-      case 'fcfConversion':
-        return 'FCF 转化率 = 自由现金流 / 归母净利润 × 100%'
-      case 'dividendGrowth':
-        return 'g1 = ROE × (1 - 股息支付率)，其中 ROE = EPS/BVPS，股息支付率 = D0/EPS'
-      case 'terminalGrowth':
-        return '永续增长率 g 默认 3%，代表长期名义增长中枢'
-      case 'moatScore':
-        return '护城河评分按 ROIC 分段启发式推导：>=25→80，>=20→65，>=15→50，>=10→35，否则20'
-      case 'governanceScore':
-        return '治理评分默认值=60（中性基线），建议按治理结构与信披质量人工修正'
-      case 'industryOverride':
-        return '行业模板：0自动识别，1金融地产，2消费医药，3强周期，4重资产基建，5科技平台'
-      case 'sotpPerShare':
-        return 'SOTP每股估值：建议按分部价值加总后折算为每股'
-      case 'sotpSegmentCorePerShare':
-        return '核心业务分部每股估值'
-      case 'sotpSegmentGrowthPerShare':
-        return '成长/新业务分部每股估值'
-      case 'sotpSegmentInvestmentPerShare':
-        return '股权投资及其他资产每股估值'
-      case 'sotpSegmentNetCashPerShare':
-        return '净现金（净负债为负值）折算每股价值'
-      case 'rndCapitalizationAdjPerShare':
-        return '研发资本化调整：将研发费用资本化后对每股价值的调整额'
-      case 'csi300EarningsYield':
-        return '股债利差温度计中的 E/P，优先用沪深300盈利收益率'
-      case 'cn10yYield':
-        return '10年期国债收益率，默认2.5%'
-      case 'pePercentile10y':
-      case 'pbPercentile10y':
-      case 'pcfPercentile10y':
-        return '该指标当前值在过去10年分布中的百分位（0-100）'
-      case 'pePercentile5y':
-      case 'pbPercentile5y':
-      case 'pcfPercentile5y':
-        return '该指标当前值在过去5年分布中的百分位（0-100）'
-      case 'peg':
-        return 'PEG=PE/盈利增长率，通常 PEG<1 代表估值与增长更匹配'
-      case 'pcf':
-        return 'PCF（市现率）越低通常越便宜，建议结合现金流质量判断'
-      case 'ocfToNi3yAvg':
-        return '近3年经营性现金流/净利润均值，低于0.7触发红旗'
-      case 'goodwillToEquity':
-        return '商誉/净资产比例，超过30%触发红旗'
-      case 'otherReceivablesToEquity':
-        return '其他应收款/净资产比例，超过20%触发红旗'
-      case 'inventoryTurnoverTrend':
-      case 'arTurnoverTrend':
-        return '最近三期相对最早一期的周转率变化（%），双双明显下降触发红旗'
-      default:
-        return undefined
-    }
   }
 
   return (
@@ -257,12 +187,16 @@ export function AnalyzerView(props: AnalyzerViewProps) {
         </div>
 
         <div className="system-tabs" role="tablist" aria-label="估值系统切换">
-          <button type="button" className={`system-tab-btn ${activeTab === 'dcf' ? 'is-active' : ''}`} onClick={() => setActiveTab('dcf')}>DCF系统</button>
-          <button type="button" className={`system-tab-btn ${activeTab === 'roepb' ? 'is-active' : ''}`} onClick={() => setActiveTab('roepb')}>ROE-PB系统</button>
-          <button type="button" className={`system-tab-btn ${activeTab === 'relative' ? 'is-active' : ''}`} onClick={() => setActiveTab('relative')}>相对估值系统</button>
-          <button type="button" className={`system-tab-btn ${activeTab === 'cashflow' ? 'is-active' : ''}`} onClick={() => setActiveTab('cashflow')}>CAPE/现金回报</button>
-          <button type="button" className={`system-tab-btn ${activeTab === 'sotp' ? 'is-active' : ''}`} onClick={() => setActiveTab('sotp')}>SOTP系统</button>
-          <button type="button" className={`system-tab-btn ${activeTab === 'risk' ? 'is-active' : ''}`} onClick={() => setActiveTab('risk')}>风险与验证</button>
+          {ANALYZER_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              className={`system-tab-btn ${activeTab === tab.key ? 'is-active' : ''}`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         <div className="system-panel">

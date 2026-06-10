@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_FORM } from '../data/defaults'
-import { analyze, computeDCF, computeRelative } from './valuation'
+import { analyze, computeDCF, computeRelative } from './valuation/index'
 
 const VALID_FORM = {
   ...DEFAULT_FORM,
