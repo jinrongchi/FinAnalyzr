@@ -262,15 +262,25 @@ export function AnalyzerView(props: AnalyzerViewProps) {
               <div>
                 <ModelBox model={relModel} />
                 {props.result.percentileCloud?.length ? (
-                  <div className="sensitivity">
-                    <h3>历史分位云图（5Y / 10Y）</h3>
+                  <div className="percentile-cloud-card">
+                    <div className="percentile-cloud-head">
+                      <h3>历史分位云图</h3>
+                      <span className="percentile-cloud-subhead">5Y / 10Y</span>
+                    </div>
+                    <div className="percentile-cloud-list">
                     {props.result.percentileCloud.map((p) => (
-                      <div className="bar" key={p.metric}>
-                        <div className="bar-label">{p.metric}</div>
-                        <div className="track"><div className="fill" style={{ width: `${Math.max(0, Math.min(100, p.percentile10y))}%` }} /></div>
-                        <div className="bar-value">{(p.percentile5y ?? 0).toFixed(1)}% / {p.percentile10y.toFixed(1)}%</div>
+                      <div className="percentile-cloud-row" key={p.metric}>
+                        <div className="percentile-cloud-label">{p.metric}</div>
+                        <div className="percentile-cloud-track">
+                          <div
+                            className="percentile-cloud-fill"
+                            style={{ width: `${Math.max(0, Math.min(100, p.percentile10y))}%` }}
+                          />
+                        </div>
+                        <div className="percentile-cloud-value">{(p.percentile5y ?? 0).toFixed(1)}% / {p.percentile10y.toFixed(1)}%</div>
                       </div>
                     ))}
+                    </div>
                   </div>
                 ) : null}
               </div>

@@ -63,13 +63,14 @@ export function ReviewView(props: ReviewViewProps) {
   const [snapshotValuationFilter, setSnapshotValuationFilter] = useState<'all' | 'undervalued' | 'overvalued'>('all')
   const [snapshotRiskFilter, setSnapshotRiskFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all')
   const [sortConfig, setSortConfig] = useState<{
-    priority: Array<'time' | 'stock' | 'gap' | 'valuation'>
-    direction: Record<'time' | 'stock' | 'gap' | 'valuation', 'asc' | 'desc'>
+    priority: Array<'time' | 'stock' | 'risk' | 'gap' | 'valuation'>
+    direction: Record<'time' | 'stock' | 'risk' | 'gap' | 'valuation', 'asc' | 'desc'>
   }>({
     priority: ['time'],
     direction: {
       time: 'desc',
       stock: 'asc',
+      risk: 'desc',
       gap: 'desc',
       valuation: 'asc',
     },
@@ -83,7 +84,6 @@ export function ReviewView(props: ReviewViewProps) {
   const [showWorseningOnlyComparison, setShowWorseningOnlyComparison] = useState(false)
   const [riskDetailSnapshotId, setRiskDetailSnapshotId] = useState<string | null>(null)
   const [riskReasonCopiedId, setRiskReasonCopiedId] = useState<string | null>(null)
-  const [prioritizeRiskSorting, setPrioritizeRiskSorting] = useState(false)
 
   const aOptions = useMemo(() => props.snapshots, [props.snapshots])
   const selectedATicker = props.compareA?.form.ticker
@@ -156,19 +156,14 @@ export function ReviewView(props: ReviewViewProps) {
     })
 
     return [...filtered].sort((a, b) => {
-      if (prioritizeRiskSorting) {
-        const rank = (s: Snapshot): number => {
-          const cls = snapshotRiskBadge(s).cls
-          if (cls === 'risk-high') return 3
-          if (cls === 'risk-mid') return 2
-          return 1
-        }
-        const riskCmp = rank(b) - rank(a)
-        if (riskCmp !== 0) return riskCmp
-      }
-
       const aGap = a.result.intrinsicValue - a.form.price
       const bGap = b.result.intrinsicValue - b.form.price
+      const riskRank = (snapshot: Snapshot): number => {
+        const cls = snapshotRiskBadge(snapshot).cls
+        if (cls === 'risk-high') return 2
+        if (cls === 'risk-mid') return 1
+        return 0
+      }
 
       const valuationRank = (gap: number): number => {
         if (gap > 0) return 0 // low price vs intrinsic => undervalued
@@ -185,6 +180,8 @@ export function ReviewView(props: ReviewViewProps) {
           cmp = aTime - bTime
         } else if (field === 'stock') {
           cmp = a.form.ticker.localeCompare(b.form.ticker, 'zh-CN')
+        } else if (field === 'risk') {
+          cmp = riskRank(a) - riskRank(b)
         } else if (field === 'gap') {
           cmp = aGap - bGap
         } else if (field === 'valuation') {
@@ -199,9 +196,9 @@ export function ReviewView(props: ReviewViewProps) {
       // Final tie-breaker keeps latest snapshots first.
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  }, [props.snapshots, snapshotQuery, snapshotValuationFilter, snapshotRiskFilter, sortConfig, prioritizeRiskSorting])
+  }, [props.snapshots, snapshotQuery, snapshotValuationFilter, snapshotRiskFilter, sortConfig])
 
-  function toggleSort(field: 'time' | 'stock' | 'gap' | 'valuation'): void {
+  function toggleSort(field: 'time' | 'stock' | 'risk' | 'gap' | 'valuation'): void {
     setSortConfig((prev) => ({
       ...(() => {
         const active = prev.priority.includes(field)
@@ -234,7 +231,7 @@ export function ReviewView(props: ReviewViewProps) {
     }))
   }
 
-  function sortMarker(field: 'time' | 'stock' | 'gap' | 'valuation'): string {
+  function sortMarker(field: 'time' | 'stock' | 'risk' | 'gap' | 'valuation'): string {
     const index = sortConfig.priority.indexOf(field)
     if (index < 0) return ''
     return sortConfig.direction[field] === 'asc' ? ' ↑' : ' ↓'
@@ -321,14 +318,6 @@ export function ReviewView(props: ReviewViewProps) {
                 <option value="mid">仅中风险</option>
                 <option value="high">仅高风险</option>
               </select>
-              <label className="compare-risk-only-toggle snapshot-risk-sort-toggle">
-                <input
-                  type="checkbox"
-                  checked={prioritizeRiskSorting}
-                  onChange={(e) => setPrioritizeRiskSorting(e.target.checked)}
-                />
-                风险优先排序
-              </label>
             </div>
 
             {filteredSnapshots.length === 0 ? <p className="status-note">没有符合筛选条件的快照。</p> : (
@@ -357,7 +346,15 @@ export function ReviewView(props: ReviewViewProps) {
                       </th>
                       <th>内在价值</th>
                       <th>当前股价</th>
-                      <th>风险标签</th>
+                      <th className="sortable-th">
+                        <button
+                          type="button"
+                          className="th-sort-btn"
+                          onClick={() => toggleSort('risk')}
+                        >
+                          风险标签{sortMarker('risk')}
+                        </button>
+                      </th>
                       <th className="sortable-th">
                         <button
                           type="button"
