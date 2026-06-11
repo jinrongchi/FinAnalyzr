@@ -41,21 +41,24 @@ export type FormState = {
   peg: number
   cape: number
   pcf: number
-  pePercentile5y: number
-  pbPercentile5y: number
-  pcfPercentile5y: number
   pePercentile10y: number
   pbPercentile10y: number
   pcfPercentile10y: number
   peAvg6m: number
   peAvg1y: number
   peAvg3y: number
+  peAvg5y: number
+  peAvg10y: number
   pbAvg6m: number
   pbAvg1y: number
   pbAvg3y: number
+  pbAvg5y: number
+  pbAvg10y: number
   pcfAvg6m: number
   pcfAvg1y: number
   pcfAvg3y: number
+  pcfAvg5y: number
+  pcfAvg10y: number
   fcfYield: number
   industryOverride: number
   sotpPerShare: number
@@ -102,7 +105,6 @@ export type LongTermReturnBreakdown = {
 
 export type PercentileCloudPoint = {
   metric: 'PE' | 'PB' | 'PCF'
-  percentile5y?: number
   percentile10y: number
 }
 
@@ -111,6 +113,8 @@ export type ValuationAveragesPoint = {
   avg6m: number
   avg1y: number
   avg3y: number
+  avg5y: number
+  avg10y: number
 }
 
 export type ValuationThermometer = {

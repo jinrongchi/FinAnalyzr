@@ -12,7 +12,7 @@ import { useTushareSync } from './hooks/useTushareSync'
 import { useTushareTokenSession } from './hooks/useTushareTokenSession'
 import { buildBacktestSeries, computeAssumptionAttribution } from './lib/backtest'
 import { ATTRIBUTION_FIELDS } from './lib/comparisonFields'
-import { buildSnapshotName } from './lib/historyDate'
+import { buildSnapshotName, formatTradeDate } from './lib/historyDate'
 import { logger } from './lib/logger'
 import { analyze, grade } from './lib/valuation/index'
 import type { SearchHistoryEntry } from './types'
@@ -128,10 +128,17 @@ function App() {
     const synced = await syncAnalyzerForm(form, forceRefresh)
     if (!synced.ok) return
 
-    const { mergedForm, stockName, sourceTradeDate, fieldSources: sources, fieldNotes: notesByField } = synced.data
+    const { mergedForm, stockName, sourceTradeDate, notes, fieldSources: sources, fieldNotes: notesByField } = synced.data
     setForm(mergedForm)
     applySyncedMetadata(sources, notesByField)
     setSnapshotDraftName(buildSnapshotName(stockName, mergedForm.ticker, sourceTradeDate))
+
+    const baseStatus = `已加载 ${stockName}，交易日 ${formatTradeDate(sourceTradeDate)}。`
+    const pcfDiagnostics = notes.filter((note) => note.includes('PCF'))
+    if (notesByField?.pcf && !pcfDiagnostics.some((note) => note.includes(notesByField.pcf as string))) {
+      pcfDiagnostics.push(`PCF诊断：${notesByField.pcf}`)
+    }
+    setSyncStatus(pcfDiagnostics.length ? `${baseStatus} ${pcfDiagnostics.join('；')}` : baseStatus)
 
     saveHistoryEntry({
       ticker: mergedForm.ticker,

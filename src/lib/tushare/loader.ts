@@ -1,7 +1,5 @@
 import type { FieldNotes, FieldSources, FormState, TushareLoadResult } from '../../types'
-import { TUSHARE_CACHE_TTL_MS } from '../../config'
 import { logger } from '../logger'
-import { getStorage, getStorageKey } from '../storage'
 import { toTsCode, tushareCall, tushareCallSafe } from './client'
 import type {
   BalanceSheetRow,
@@ -24,30 +22,6 @@ import { roundNumber } from './utils'
 
 export { getTushareHealthUrl } from './client'
 
-const STORAGE = getStorage()
-const CACHE_PREFIX = getStorageKey('tushare.v4')
-const TTL_MS = TUSHARE_CACHE_TTL_MS
-
-function readCache<T>(key: string): T | null {
-  const raw = STORAGE.getItem(key)
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as { expiresAt: number; value: T }
-    if (Date.now() > parsed.expiresAt) {
-      STORAGE.removeItem(key)
-      return null
-    }
-    return parsed.value
-  } catch {
-    STORAGE.removeItem(key)
-    return null
-  }
-}
-
-function writeCache<T>(key: string, value: T): void {
-  STORAGE.setItem(key, JSON.stringify({ expiresAt: Date.now() + TTL_MS, value }))
-}
-
 function toYmd(value: Date): string {
   const y = value.getFullYear()
   const m = String(value.getMonth() + 1).padStart(2, '0')
@@ -65,20 +39,7 @@ export async function loadFromTushare(
   const forceRefresh = options?.forceRefresh === true
 
   const tsCode = toTsCode(ticker)
-  const cacheKey = `${CACHE_PREFIX}:${tsCode}`
-  const cached = forceRefresh ? null : readCache<TushareLoadResult>(cacheKey)
-  if (cached) {
-    logger.info('TuShare cache hit', { tsCode, cacheKey })
-    return {
-      ...cached,
-      fieldSources: cached.fieldSources || {},
-      fieldNotes: cached.fieldNotes || {},
-      stockName: cached.stockName || tsCode,
-      fetchedAt: cached.fetchedAt || new Date().toISOString(),
-    }
-  }
-
-  logger.info('TuShare fetch start', { tsCode, forceRefresh })
+  logger.info('TuShare fetch start', { tsCode, forceRefresh, cacheEnabled: false })
 
   const notes: string[] = []
   const fieldSources: FieldSources = {}
@@ -93,10 +54,22 @@ export async function loadFromTushare(
   const startMonth = `${startDate.slice(0, 4)}01`
   const endMonth = `${endDate.slice(0, 4)}12`
 
-  const [dailyBasicTable, dailyBasic10yTable, dailyPcf10yTable, indexDailyBasicTable, finaTable, cashTable, stockBasicTable, balanceTable, stkFactorTable, incomeTable, cpiTable, relatedTradeTable, guaranteeTable] = await Promise.all([
+  const pcfPromise = tushareCall<DailyPcfRow>(
+    trimmedToken,
+    'daily_basic',
+    { ts_code: tsCode, start_date: startDate, end_date: endDate },
+    'ts_code,trade_date,pcf_ncf_ttm,pcf_ocf_ttm,pcf_ttm,pcf',
+  )
+    .then((table) => ({ table, error: '' }))
+    .catch((error: unknown) => ({
+      table: { fields: [] as string[], items: [] as DailyPcfRow[] },
+      error: error instanceof Error ? error.message : '未知错误',
+    }))
+
+  const [dailyBasicTable, dailyBasic10yTable, pcfFetchResult, indexDailyBasicTable, finaTable, cashTable, stockBasicTable, balanceTable, stkFactorTable, incomeTable, cpiTable, relatedTradeTable, guaranteeTable] = await Promise.all([
     tushareCall<DailyBasicRow>(trimmedToken, 'daily_basic', { ts_code: tsCode }, 'ts_code,trade_date,close,pe_ttm,pb,dv_ttm,total_share'),
     tushareCallSafe<DailyBasicRow>(trimmedToken, 'daily_basic', { ts_code: tsCode, start_date: startDate, end_date: endDate }, 'ts_code,trade_date,close,pe_ttm,pb,dv_ttm,total_share'),
-    tushareCallSafe<DailyPcfRow>(trimmedToken, 'daily_basic', { ts_code: tsCode, start_date: startDate, end_date: endDate }, 'ts_code,trade_date,pcf_ncf_ttm'),
+    pcfPromise,
     tushareCallSafe<IndexDailyBasicRow>(trimmedToken, 'index_dailybasic', { ts_code: '000300.SH', start_date: startDate, end_date: endDate }, 'ts_code,trade_date,pe_ttm'),
     tushareCall<FinaIndicatorRow>(trimmedToken, 'fina_indicator', { ts_code: tsCode }, 'ts_code,end_date,eps,bps,ebitda,roic,debt_to_assets,ocf_to_or,n_income_attr_p,inv_turn,ar_turn'),
     tushareCall<CashflowRow>(trimmedToken, 'cashflow', { ts_code: tsCode }, 'ts_code,end_date,n_cashflow_act,n_cashflow_inv_act,free_cashflow'),
@@ -112,6 +85,8 @@ export async function loadFromTushare(
   const latestDaily = dailyBasicTable.items[0]
   const latestFina = finaTable.items[0]
   const latestCash = cashTable.items[0]
+  const dailyPcf10yTable = pcfFetchResult.table
+  const pcfFetchError = pcfFetchResult.error
   let latestStockBasic = stockBasicTable.items[0]
   const latestBalance = balanceTable.items[0]
   const previousCash = cashTable.items[1]
@@ -125,6 +100,32 @@ export async function loadFromTushare(
   const daily10yFields = dailyBasic10yTable.fields
   const dailyPcfFields = dailyPcf10yTable.fields
   const indexDailyFields = indexDailyBasicTable.fields
+
+  const pcfAcceptedFields = ['pcf_ncf_ttm', 'pcf_ocf_ttm', 'pcf_ttm', 'pcf']
+  const resolvedPcfField = pcfAcceptedFields.find((name) => dailyPcfFields.includes(name))
+  const pcfLikelyPermissionIssue = dailyPcfFields.length > 0
+    && dailyPcfFields.includes('ts_code')
+    && dailyPcfFields.includes('trade_date')
+    && !resolvedPcfField
+
+  if (pcfFetchError) {
+    notes.push(`PCF 数据接口请求失败：${pcfFetchError}`)
+    addFieldNote('pcf', `TuShare daily_basic(pcf_ncf_ttm) 请求失败：${pcfFetchError}`)
+  } else if (!dailyPcfFields.length) {
+    notes.push('PCF 数据接口返回为空结果（无字段）。')
+    addFieldNote('pcf', 'TuShare daily_basic(pcf_ncf_ttm) 返回空结果，当前回退为已有值或0')
+  } else if (pcfLikelyPermissionIssue) {
+    notes.push('PCF 字段疑似被权限裁剪：接口仅返回 ts_code/trade_date。')
+    addFieldNote('pcf', `TuShare 返回字段疑似权限裁剪（仅 ${dailyPcfFields.join('/')}）。请用同一 token 在 TuShare WebClient 验证 daily_basic 的 PCF 字段权限后重试`)
+  } else if (!resolvedPcfField) {
+    notes.push(`PCF 数据返回缺少可用字段（候选: ${pcfAcceptedFields.join('/')}）。`)
+    addFieldNote('pcf', `TuShare 返回字段中缺少可用PCF字段（${pcfAcceptedFields.join('/')}），实际返回：${dailyPcfFields.join('/') || '空'}，当前回退为已有值或0`)
+  } else if (!dailyPcf10yTable.items.length) {
+    notes.push('PCF 历史序列为空，无法计算分位与区间均值。')
+    addFieldNote('pcf', `PCF 历史序列为空（字段：${resolvedPcfField}），当前回退为已有值或0`)
+  } else {
+    addFieldNote('pcf', `PCF 使用字段：${resolvedPcfField}（返回字段：${dailyPcfFields.join('/') || '空'}）`)
+  }
 
   if (!latestStockBasic) {
     const fallbackStockTable = await tushareCall<StockBasicRow>(trimmedToken, 'stock_basic', { symbol: ticker.trim() }, 'ts_code,name,list_date,industry,market')
@@ -140,21 +141,24 @@ export async function loadFromTushare(
     totalShareWan,
     sharesYi,
     pcf,
-    pePercentile5y,
-    pbPercentile5y,
-    pcfPercentile5y,
     pePercentile10y,
     pbPercentile10y,
     pcfPercentile10y,
     peAvg6m,
     peAvg1y,
     peAvg3y,
+    peAvg5y,
+    peAvg10y,
     pbAvg6m,
     pbAvg1y,
     pbAvg3y,
+    pbAvg5y,
+    pbAvg10y,
     pcfAvg6m,
     pcfAvg1y,
     pcfAvg3y,
+    pcfAvg5y,
+    pcfAvg10y,
   } = deriveMarketData({ latestDaily, dailyFields, dailyBasic10yTable, daily10yFields, dailyPcf10yTable, dailyPcfFields, current, fieldSources })
 
   const { eps, bvps, roic, deRatio, finaInvTurn, finaArTurn, ebitdaPerShare, fcfYi, fcfConversion, derivedFcfGrowth, derivedNetDebt, balanceGoodwill, balanceOtherReceivables, balanceEquity } = deriveFundamentalCashflowData({ latestFina, finaFields, latestCash, previousCash, cashFields, latestBalance, balanceFields, current, close, peTtm, totalShareWan, fieldSources, notes, addFieldNote })
@@ -239,21 +243,24 @@ export async function loadFromTushare(
       peg: roundNumber(peg, 4),
       cape: roundNumber(cape, 4),
       pcf: roundNumber(pcf, 4),
-      pePercentile5y: roundNumber(pePercentile5y, 2),
-      pbPercentile5y: roundNumber(pbPercentile5y, 2),
-      pcfPercentile5y: roundNumber(pcfPercentile5y, 2),
       pePercentile10y: roundNumber(pePercentile10y, 2),
       pbPercentile10y: roundNumber(pbPercentile10y, 2),
       pcfPercentile10y: roundNumber(pcfPercentile10y, 2),
       peAvg6m: roundNumber(peAvg6m, 4),
       peAvg1y: roundNumber(peAvg1y, 4),
       peAvg3y: roundNumber(peAvg3y, 4),
+      peAvg5y: roundNumber(peAvg5y, 4),
+      peAvg10y: roundNumber(peAvg10y, 4),
       pbAvg6m: roundNumber(pbAvg6m, 4),
       pbAvg1y: roundNumber(pbAvg1y, 4),
       pbAvg3y: roundNumber(pbAvg3y, 4),
+      pbAvg5y: roundNumber(pbAvg5y, 4),
+      pbAvg10y: roundNumber(pbAvg10y, 4),
       pcfAvg6m: roundNumber(pcfAvg6m, 4),
       pcfAvg1y: roundNumber(pcfAvg1y, 4),
       pcfAvg3y: roundNumber(pcfAvg3y, 4),
+      pcfAvg5y: roundNumber(pcfAvg5y, 4),
+      pcfAvg10y: roundNumber(pcfAvg10y, 4),
       fcfYield: roundNumber(fcfYield, 4),
       equityBondSpreadMean10y: roundNumber(equityBondSpreadMean10y, 4),
       equityBondSpreadStd10y: roundNumber(equityBondSpreadStd10y, 4),
@@ -266,7 +273,6 @@ export async function loadFromTushare(
     fetchedAt: new Date().toISOString(),
   }
 
-  writeCache(cacheKey, result)
   logger.info('TuShare fetch completed', { tsCode, sourceTradeDate: result.sourceTradeDate, stockName: result.stockName, discountRate: adjustedDiscountRate, terminalGrowth, beta })
   return result
 }

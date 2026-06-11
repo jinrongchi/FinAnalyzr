@@ -14,11 +14,7 @@ export type IndexDailyBasicRow = [
   number | null,
 ]
 
-export type DailyPcfRow = [
-  string,
-  string,
-  number | null,
-]
+export type DailyPcfRow = Array<string | number | null>
 
 export type FinaIndicatorRow = [
   string,

@@ -79,10 +79,7 @@ export const DATA_COVERAGE_CHECKS: CoverageCheck[] = [
   { key: 'peg', label: 'PEG' },
   { key: 'dividend0', label: '股息D0' },
   { key: 'csi300EarningsYield', label: '股债利差E/P' },
-  { key: 'pePercentile5y', label: 'PE分位(5Y)' },
-  { key: 'pbPercentile5y', label: 'PB分位(5Y)' },
-  { key: 'pcfPercentile5y', label: 'PCF分位(5Y)' },
-  { key: 'pePercentile10y', label: 'PE分位' },
-  { key: 'pbPercentile10y', label: 'PB分位' },
-  { key: 'pcfPercentile10y', label: 'PCF分位' },
+  { key: 'pePercentile10y', label: 'PE分位(10Y)' },
+  { key: 'pbPercentile10y', label: 'PB分位(10Y)' },
+  { key: 'pcfPercentile10y', label: 'PCF分位(10Y)' },
 ]

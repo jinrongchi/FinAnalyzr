@@ -228,25 +228,6 @@ export function ReviewComparisonPanel(props: ReviewComparisonPanelProps) {
                   <div>{formatCapeMethod(compareA)} → {formatCapeMethod(compareB)}</div>
                 </div>
               ) : null}
-              {canShowAdvancedRow(((compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)) > 10, ((compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)) > 10) ? (
-                <div className="compare-row">
-                  <div>PE/PB/PCF 分位(5Y/10Y)</div>
-                  <div>
-                    {formatMaybeNumber(compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0)} / {formatMaybeNumber(compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)}<br />
-                    {formatMaybeNumber(compareA.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile5y || 0)} / {formatMaybeNumber(compareA.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile10y || 0)}<br />
-                    {formatMaybeNumber(compareA.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile5y || 0)} / {formatMaybeNumber(compareA.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile10y || 0)}
-                  </div>
-                  <div>
-                    {formatMaybeNumber(compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0)} / {formatMaybeNumber(compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)}<br />
-                    {formatMaybeNumber(compareB.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile5y || 0)} / {formatMaybeNumber(compareB.result.percentileCloud?.find((p) => p.metric === 'PB')?.percentile10y || 0)}<br />
-                    {formatMaybeNumber(compareB.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile5y || 0)} / {formatMaybeNumber(compareB.result.percentileCloud?.find((p) => p.metric === 'PCF')?.percentile10y || 0)}
-                  </div>
-                  <div className={((compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0)) >= 0 ? 'delta-up' : 'delta-down'}>
-                    ΔPE(5Y) {formatMaybeNumber((compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0) - (compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile5y || 0))}<br />
-                    ΔPE(10Y) {formatMaybeNumber((compareB.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0) - (compareA.result.percentileCloud?.find((p) => p.metric === 'PE')?.percentile10y || 0))}
-                  </div>
-                </div>
-              ) : null}
             </>
           ) : (
             <div className="compare-row compare-row-collapsed-note">

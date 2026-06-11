@@ -67,21 +67,9 @@ function computeValuationRange(
 
 function buildPercentileCloud(input: FormState): AnalysisResult['percentileCloud'] {
   return [
-    {
-      metric: 'PE',
-      percentile5y: clamp(input.pePercentile5y, 0, 100),
-      percentile10y: clamp(input.pePercentile10y, 0, 100),
-    },
-    {
-      metric: 'PB',
-      percentile5y: clamp(input.pbPercentile5y, 0, 100),
-      percentile10y: clamp(input.pbPercentile10y, 0, 100),
-    },
-    {
-      metric: 'PCF',
-      percentile5y: clamp(input.pcfPercentile5y, 0, 100),
-      percentile10y: clamp(input.pcfPercentile10y, 0, 100),
-    },
+    { metric: 'PE', percentile10y: clamp(input.pePercentile10y, 0, 100) },
+    { metric: 'PB', percentile10y: clamp(input.pbPercentile10y, 0, 100) },
+    { metric: 'PCF', percentile10y: clamp(input.pcfPercentile10y, 0, 100) },
   ]
 }
 
@@ -92,18 +80,24 @@ function buildValuationAverages(input: FormState): AnalysisResult['valuationAver
       avg6m: clamp(input.peAvg6m, 0, Number.POSITIVE_INFINITY),
       avg1y: clamp(input.peAvg1y, 0, Number.POSITIVE_INFINITY),
       avg3y: clamp(input.peAvg3y, 0, Number.POSITIVE_INFINITY),
+      avg5y: clamp(input.peAvg5y, 0, Number.POSITIVE_INFINITY),
+      avg10y: clamp(input.peAvg10y, 0, Number.POSITIVE_INFINITY),
     },
     {
       metric: 'PB',
       avg6m: clamp(input.pbAvg6m, 0, Number.POSITIVE_INFINITY),
       avg1y: clamp(input.pbAvg1y, 0, Number.POSITIVE_INFINITY),
       avg3y: clamp(input.pbAvg3y, 0, Number.POSITIVE_INFINITY),
+      avg5y: clamp(input.pbAvg5y, 0, Number.POSITIVE_INFINITY),
+      avg10y: clamp(input.pbAvg10y, 0, Number.POSITIVE_INFINITY),
     },
     {
       metric: 'PCF',
       avg6m: clamp(input.pcfAvg6m, 0, Number.POSITIVE_INFINITY),
       avg1y: clamp(input.pcfAvg1y, 0, Number.POSITIVE_INFINITY),
       avg3y: clamp(input.pcfAvg3y, 0, Number.POSITIVE_INFINITY),
+      avg5y: clamp(input.pcfAvg5y, 0, Number.POSITIVE_INFINITY),
+      avg10y: clamp(input.pcfAvg10y, 0, Number.POSITIVE_INFINITY),
     },
   ]
 }

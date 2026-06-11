@@ -112,6 +112,7 @@ describe('loadFromTushare source labeling', () => {
     expect(result.fieldNotes.discountRate).toContain('成长板风险溢价')
     expect(result.fieldNotes.netDebt).toContain('净负债=流动负债+非流动负债-货币资金')
     expect(result.fieldNotes.netDebt).toContain('balancesheet 未返回货币资金')
+    expect(result.fieldNotes.pcf).toContain('权限裁剪')
   })
 
   it('does not infer manual labels from pre-filled numeric values', async () => {
@@ -217,6 +218,23 @@ describe('loadFromTushare source labeling', () => {
 
       switch (payload.api_name) {
         case 'daily_basic':
+          if (raw.includes('pcf_ncf_ttm')) {
+            return {
+              ok: true,
+              json: async () => ok(
+                ['ts_code', 'trade_date', 'pcf_ncf_ttm'],
+                [
+                  ['600519.SH', '20260610', 18],
+                  ['600519.SH', '20250610', 17],
+                  ['600519.SH', '20240610', 16],
+                  ['600519.SH', '20230610', 15],
+                  ['600519.SH', '20220610', 14],
+                  ['600519.SH', '20180610', 12],
+                ],
+              ),
+            }
+          }
+
           if (payload.params?.start_date) {
             return {
               ok: true,
@@ -304,26 +322,25 @@ describe('loadFromTushare source labeling', () => {
       '600519',
       {
         ...DEFAULT_FORM,
-        pePercentile5y: 51.4,
         pePercentile10y: 26.1,
-        pbPercentile5y: 56.8,
         pbPercentile10y: 52.3,
-        pcfPercentile5y: 33.3,
         pcfPercentile10y: 22.2,
       },
       { forceRefresh: true },
     )
 
-    expect(result.patch.pePercentile5y).toBe(100)
     expect(result.patch.pePercentile10y).toBe(100)
-    expect(result.patch.pbPercentile5y).toBe(100)
     expect(result.patch.pbPercentile10y).toBe(100)
     expect(result.patch.peAvg6m).toBe(25)
     expect(result.patch.peAvg1y).toBe(22.5)
     expect(result.patch.peAvg3y).toBe(20)
+    expect(result.patch.peAvg5y).toBe(17.5)
+    expect(result.patch.peAvg10y).toBe(17.5)
     expect(result.patch.pbAvg6m).toBe(8)
     expect(result.patch.pbAvg1y).toBe(7.5)
     expect(result.patch.pbAvg3y).toBe(7)
+    expect(result.patch.pbAvg5y).toBe(6.5)
+    expect(result.patch.pbAvg10y).toBe(6.5)
   })
 
   it('auto-fills optional related-party and guarantee risk ratios when tables are available', async () => {
@@ -422,5 +439,297 @@ describe('loadFromTushare source labeling', () => {
     expect(result.patch.externalGuaranteeToEquity).toBeCloseTo(30, 6)
     expect(result.fieldSources.relatedPartySalesToRevenue).toBe('derived')
     expect(result.fieldSources.externalGuaranteeToEquity).toBe('derived')
+  })
+
+  it('provides concrete PCF error diagnostics when pcf_ncf_ttm request fails', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const raw = String(init?.body || '{}')
+      const payload = JSON.parse(raw) as { api_name?: string; params?: { start_date?: string } }
+
+      switch (payload.api_name) {
+        case 'daily_basic':
+          if (raw.includes('pcf_ncf_ttm')) {
+            return {
+              ok: false,
+              status: 503,
+              json: async () => ({ code: -1, msg: 'pcf endpoint unavailable' }),
+            }
+          }
+
+          if (payload.params?.start_date) {
+            return {
+              ok: true,
+              json: async () => ok(
+                ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+                [
+                  ['600519.SH', '20260610', 1600, 20, 7.5, 1.2, 125619.78],
+                  ['600519.SH', '20250610', 1550, 21, 7.6, 1.1, 125619.78],
+                  ['600519.SH', '20240610', 1500, 22, 7.7, 1.0, 125619.78],
+                  ['600519.SH', '20230610', 1450, 23, 7.8, 0.9, 125619.78],
+                  ['600519.SH', '20220610', 1400, 24, 7.9, 0.8, 125619.78],
+                  ['600519.SH', '20180610', 1300, 26, 8.2, 0.7, 125619.78],
+                ],
+              ),
+            }
+          }
+
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+              [['600519.SH', '20260610', 1600, 20, 7.5, 1.2, 125619.78]],
+            ),
+          }
+        case 'fina_indicator':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'eps', 'bps', 'ebitda', 'roic', 'debt_to_assets', 'ocf_to_or', 'n_income_attr_p', 'inv_turn', 'ar_turn'],
+              [['600519.SH', '20260331', 65, 200, 8000000, 24, 15, 30, 10000000000, 5, 6]],
+            ),
+          }
+        case 'cashflow':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'n_cashflow_act', 'n_cashflow_inv_act', 'free_cashflow'],
+              [['600519.SH', '20260331', 10000000000, -2000000000, 8000000000]],
+            ),
+          }
+        case 'stock_basic':
+          return {
+            ok: true,
+            json: async () => ok(['ts_code', 'name', 'list_date', 'industry', 'market'], [['600519.SH', '贵州茅台', '20010827', '食品饮料', '主板']]),
+          }
+        case 'balancesheet':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'monetary_cap', 'total_cur_liab', 'total_ncl', 'goodwill', 'oth_receiv', 'notes_receiv', 'total_hldr_eqy_exc_min_int'],
+              [['600519.SH', '20260331', 1000000000, 500000000, 300000000, 10000000, 5000000, 1000000, 3000000000]],
+            ),
+          }
+        case 'stk_factor':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        case 'index_dailybasic':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        case 'income':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        case 'cn_cpi':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        default:
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ code: -1, msg: `unsupported api: ${payload.api_name || 'unknown'}` }),
+          }
+      }
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await loadFromTushare('', '600519', { ...DEFAULT_FORM }, { forceRefresh: true })
+
+    expect(fetchMock).toHaveBeenCalled()
+    expect(result.patch.peAvg5y).toBe(22)
+    expect(result.patch.peAvg10y).toBe(22.6667)
+    expect(result.patch.pbAvg5y).toBe(7.7)
+    expect(result.patch.pbAvg10y).toBe(7.7833)
+    expect(result.patch.pcfAvg5y).toBe(0)
+    expect(result.patch.pcfAvg10y).toBe(0)
+    expect(result.fieldNotes.pcf).toContain('HTTP 503')
+    expect(result.notes.some((note) => note.includes('PCF 数据接口请求失败'))).toBe(true)
+  })
+
+  it('falls back to pcf_ttm when pcf_ncf_ttm is not provided', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const raw = String(init?.body || '{}')
+      const payload = JSON.parse(raw) as { api_name?: string; params?: { start_date?: string } }
+
+      switch (payload.api_name) {
+        case 'daily_basic':
+          if (raw.includes('pcf_ncf_ttm')) {
+            return {
+              ok: true,
+              json: async () => ok(
+                ['ts_code', 'trade_date', 'pcf_ttm'],
+                [
+                  ['600519.SH', '20260610', 18],
+                  ['600519.SH', '20250610', 17],
+                ],
+              ),
+            }
+          }
+
+          if (payload.params?.start_date) {
+            return {
+              ok: true,
+              json: async () => ok(
+                ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+                [['600519.SH', '20260610', 1600, 20, 7.5, 1.2, 125619.78]],
+              ),
+            }
+          }
+
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+              [['600519.SH', '20260610', 1600, 20, 7.5, 1.2, 125619.78]],
+            ),
+          }
+        case 'fina_indicator':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'eps', 'bps', 'ebitda', 'roic', 'debt_to_assets', 'ocf_to_or', 'n_income_attr_p', 'inv_turn', 'ar_turn'],
+              [['600519.SH', '20260331', 65, 200, 8000000, 24, 15, 30, 10000000000, 5, 6]],
+            ),
+          }
+        case 'cashflow':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'n_cashflow_act', 'n_cashflow_inv_act', 'free_cashflow'],
+              [['600519.SH', '20260331', 10000000000, -2000000000, 8000000000]],
+            ),
+          }
+        case 'stock_basic':
+          return {
+            ok: true,
+            json: async () => ok(['ts_code', 'name', 'list_date', 'industry', 'market'], [['600519.SH', '贵州茅台', '20010827', '食品饮料', '主板']]),
+          }
+        case 'balancesheet':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'monetary_cap', 'total_cur_liab', 'total_ncl', 'goodwill', 'oth_receiv', 'notes_receiv', 'total_hldr_eqy_exc_min_int'],
+              [['600519.SH', '20260331', 1000000000, 500000000, 300000000, 10000000, 5000000, 1000000, 3000000000]],
+            ),
+          }
+        case 'stk_factor':
+        case 'index_dailybasic':
+        case 'income':
+        case 'cn_cpi':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        default:
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ code: -1, msg: `unsupported api: ${payload.api_name || 'unknown'}` }),
+          }
+      }
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await loadFromTushare('', '600519', { ...DEFAULT_FORM }, { forceRefresh: true })
+
+    expect(result.patch.pcf).toBe(18)
+    expect(result.fieldNotes.pcf).toContain('PCF 使用字段：pcf_ttm')
+  })
+
+  it('shows explicit permission-strip diagnostics when PCF request only returns ts_code/trade_date', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const raw = String(init?.body || '{}')
+      const payload = JSON.parse(raw) as { api_name?: string; params?: { start_date?: string } }
+
+      switch (payload.api_name) {
+        case 'daily_basic':
+          if (raw.includes('pcf_ncf_ttm')) {
+            return {
+              ok: true,
+              json: async () => ok(
+                ['ts_code', 'trade_date'],
+                [['600519.SH', '20260610']],
+              ),
+            }
+          }
+
+          if (payload.params?.start_date) {
+            return {
+              ok: true,
+              json: async () => ok(
+                ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+                [['600519.SH', '20260610', 1600, 20, 7.5, 1.2, 125619.78]],
+              ),
+            }
+          }
+
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'trade_date', 'close', 'pe_ttm', 'pb', 'dv_ttm', 'total_share'],
+              [['600519.SH', '20260610', 1600, 20, 7.5, 1.2, 125619.78]],
+            ),
+          }
+        case 'fina_indicator':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'eps', 'bps', 'ebitda', 'roic', 'debt_to_assets', 'ocf_to_or', 'n_income_attr_p', 'inv_turn', 'ar_turn'],
+              [['600519.SH', '20260331', 65, 200, 8000000, 24, 15, 30, 10000000000, 5, 6]],
+            ),
+          }
+        case 'cashflow':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'n_cashflow_act', 'n_cashflow_inv_act', 'free_cashflow'],
+              [['600519.SH', '20260331', 10000000000, -2000000000, 8000000000]],
+            ),
+          }
+        case 'stock_basic':
+          return {
+            ok: true,
+            json: async () => ok(['ts_code', 'name', 'list_date', 'industry', 'market'], [['600519.SH', '贵州茅台', '20010827', '食品饮料', '主板']]),
+          }
+        case 'balancesheet':
+          return {
+            ok: true,
+            json: async () => ok(
+              ['ts_code', 'end_date', 'monetary_cap', 'total_cur_liab', 'total_ncl', 'goodwill', 'oth_receiv', 'notes_receiv', 'total_hldr_eqy_exc_min_int'],
+              [['600519.SH', '20260331', 1000000000, 500000000, 300000000, 10000000, 5000000, 1000000, 3000000000]],
+            ),
+          }
+        case 'stk_factor':
+        case 'index_dailybasic':
+        case 'income':
+        case 'cn_cpi':
+          return {
+            ok: true,
+            json: async () => ok([], []),
+          }
+        default:
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ code: -1, msg: `unsupported api: ${payload.api_name || 'unknown'}` }),
+          }
+      }
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await loadFromTushare('', '600519', { ...DEFAULT_FORM }, { forceRefresh: true })
+
+    expect(result.patch.pcf).toBe(0)
+    expect(result.fieldNotes.pcf).toContain('权限裁剪')
+    expect(result.fieldNotes.pcf).toContain('ts_code/trade_date')
   })
 })

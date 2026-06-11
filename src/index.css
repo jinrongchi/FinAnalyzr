@@ -272,6 +272,103 @@ select:focus {
   padding: 12px;
 }
 
+.pct-gauge-card {
+  margin-top: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(17, 42, 70, 0.06);
+}
+
+.pct-gauge-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pct-gauge-head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.pct-gauge-list {
+  display: grid;
+  gap: 14px;
+}
+
+.pct-gauge-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 64px;
+  align-items: center;
+  gap: 10px;
+}
+
+.pct-gauge-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.pct-gauge-track {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  overflow: visible;
+  background: linear-gradient(90deg, #16a34a 0%, #16a34a 30%, #d97706 30%, #d97706 70%, #dc2626 70%, #dc2626 100%);
+  opacity: 0.25;
+}
+
+.pct-gauge-track {
+  opacity: 1;
+  background: linear-gradient(90deg, #dcfce7 0%, #dcfce7 30%, #fef9c3 30%, #fef9c3 70%, #fee2e2 70%, #fee2e2 100%);
+  border: 1px solid #e2e8f0;
+}
+
+.pct-gauge-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+
+.pct-gauge-thumb.is-cheap { background: #16a34a; }
+.pct-gauge-thumb.is-mid   { background: #d97706; }
+.pct-gauge-thumb.is-exp   { background: #dc2626; }
+
+.pct-gauge-value {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pct-gauge-value.is-cheap { color: #16a34a; }
+.pct-gauge-value.is-mid   { color: #d97706; }
+.pct-gauge-value.is-exp   { color: #dc2626; }
+
+.pct-gauge-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
+.pct-gauge-legend-item {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.pct-gauge-legend-item.is-cheap { background: #dcfce7; color: #16a34a; }
+.pct-gauge-legend-item.is-mid   { background: #fef9c3; color: #92400e; }
+.pct-gauge-legend-item.is-exp   { background: #fee2e2; color: #dc2626; }
+
 .valuation-avg-card {
   margin-top: 14px;
   background: #f8fafc;
@@ -301,12 +398,17 @@ select:focus {
 
 .valuation-avg-list {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
 .valuation-avg-metric {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
 }
 
 .valuation-avg-metric-label {
@@ -315,50 +417,72 @@ select:focus {
   color: var(--ink);
 }
 
-.valuation-avg-bars {
-  display: grid;
-  gap: 8px;
+.valuation-avg-card--full {
+  margin-top: 14px;
 }
 
-.valuation-avg-row {
+.valuation-avg-columns {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 72px;
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.valuation-avg-column {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  grid-template-rows: auto 1fr auto;
+}
+
+.valuation-avg-column-track {
+  width: 100%;
+  max-width: 42px;
+  height: 120px;
+  border-radius: 10px;
+  background: #e2e8f0;
+  border: 1px solid #d7deea;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
 }
 
 .valuation-avg-term {
   font-size: 12px;
   font-weight: 700;
   color: var(--ink-soft);
+  text-align: center;
 }
 
-.valuation-avg-track {
-  height: 12px;
-  background: #e2e8f0;
-  border-radius: 999px;
-  overflow: hidden;
+.valuation-avg-column-fill {
+  width: 100%;
+  min-height: 0;
+  border-radius: 8px 8px 0 0;
 }
 
-.valuation-avg-fill {
-  height: 100%;
-  border-radius: inherit;
-}
-
-.valuation-avg-fill.is-6m {
+.valuation-avg-column-fill.is-6m {
   background: linear-gradient(90deg, #2563eb, #3b82f6);
 }
 
-.valuation-avg-fill.is-1y {
+.valuation-avg-column-fill.is-1y {
   background: linear-gradient(90deg, #0891b2, #06b6d4);
 }
 
-.valuation-avg-fill.is-3y {
+.valuation-avg-column-fill.is-3y {
   background: linear-gradient(90deg, #0f766e, #14b8a6);
 }
 
+.valuation-avg-column-fill.is-5y {
+  background: linear-gradient(90deg, #0284c7, #0ea5e9);
+}
+
+.valuation-avg-column-fill.is-10y {
+  background: linear-gradient(90deg, #4f46e5, #6366f1);
+}
+
 .valuation-avg-value {
-  text-align: right;
+  text-align: center;
   font-size: 13px;
   font-weight: 700;
   color: var(--ink);
@@ -1291,6 +1415,10 @@ select:focus {
   }
 
   .kpi {
+    grid-template-columns: 1fr;
+  }
+
+  .valuation-avg-list {
     grid-template-columns: 1fr;
   }
 

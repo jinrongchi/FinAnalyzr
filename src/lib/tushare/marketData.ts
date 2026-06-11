@@ -2,6 +2,8 @@ import type { FieldSources, FormState } from '../../types'
 import type { DailyBasicRow, DailyPcfRow } from './rows'
 import { getFieldValue, normalizeNumber, percentileRank } from './utils'
 
+const PCF_FIELD_CANDIDATES = ['pcf_ncf_ttm', 'pcf_ocf_ttm', 'pcf_ttm', 'pcf'] as const
+
 function parseTradeDate(tradeDate: string | null | undefined): Date | null {
   if (!tradeDate || !/^\d{8}$/.test(tradeDate)) return null
   const y = Number(tradeDate.slice(0, 4))
@@ -41,6 +43,10 @@ function averageInRecentDays<T extends unknown[]>(
 
   if (!samples.length) return fallback
   return average(samples)
+}
+
+function resolvePcfFieldName(fields: string[]): string | undefined {
+  return PCF_FIELD_CANDIDATES.find((name) => fields.includes(name))
 }
 
 export function parseListedYears(listDate: string | null | undefined, asOf: Date): number {
@@ -106,21 +112,24 @@ export function deriveMarketData(args: {
   totalShareWan: number
   sharesYi: number
   pcf: number
-  pePercentile5y: number
-  pbPercentile5y: number
-  pcfPercentile5y: number
   pePercentile10y: number
   pbPercentile10y: number
   pcfPercentile10y: number
   peAvg6m: number
   peAvg1y: number
   peAvg3y: number
+  peAvg5y: number
+  peAvg10y: number
   pbAvg6m: number
   pbAvg1y: number
   pbAvg3y: number
+  pbAvg5y: number
+  pbAvg10y: number
   pcfAvg6m: number
   pcfAvg1y: number
   pcfAvg3y: number
+  pcfAvg5y: number
+  pcfAvg10y: number
 } {
   const { latestDaily, dailyFields, dailyBasic10yTable, daily10yFields, dailyPcf10yTable, dailyPcfFields, current, fieldSources } = args
 
@@ -142,73 +151,82 @@ export function deriveMarketData(args: {
     .map((row) => getFieldValue<number | null>(row, daily10yFields, 'pe_ttm'))
     .map((v) => normalizeNumber(v, 0))
     .filter((v) => v > 0)
-  const peHistory5y = peHistory.slice(0, Math.max(1, Math.floor(peHistory.length / 2)))
 
   const pbHistory = dailyBasic10yTable.items
     .map((row) => getFieldValue<number | null>(row, daily10yFields, 'pb'))
     .map((v) => normalizeNumber(v, 0))
     .filter((v) => v > 0)
-  const pbHistory5y = pbHistory.slice(0, Math.max(1, Math.floor(pbHistory.length / 2)))
 
-  const pePercentile5yDerived = percentileRank(peTtm, peHistory5y)
   const pePercentile10yDerived = percentileRank(peTtm, peHistory)
-  const pePercentile5y = pePercentile5yDerived > 0 ? pePercentile5yDerived : current.pePercentile5y
   const pePercentile10y = pePercentile10yDerived > 0 ? pePercentile10yDerived : current.pePercentile10y
 
   const pbCurrent = normalizeNumber(getFieldValue<number | null>(latestDaily, dailyFields, 'pb'), current.industryPB)
-  const pbPercentile5yDerived = percentileRank(pbCurrent, pbHistory5y)
   const pbPercentile10yDerived = percentileRank(pbCurrent, pbHistory)
-  const pbPercentile5y = pbPercentile5yDerived > 0 ? pbPercentile5yDerived : current.pbPercentile5y
   const pbPercentile10y = pbPercentile10yDerived > 0 ? pbPercentile10yDerived : current.pbPercentile10y
 
-  const pcfHistory = dailyPcf10yTable.items
-    .map((row) => getFieldValue<number | null>(row, dailyPcfFields, 'pcf_ncf_ttm'))
-    .map((v) => normalizeNumber(v, 0))
-    .filter((v) => v > 0)
-  const pcfHistory5y = pcfHistory.slice(0, Math.max(1, Math.floor(pcfHistory.length / 2)))
+  const pcfFieldName = resolvePcfFieldName(dailyPcfFields)
+  const pcfHistory = pcfFieldName
+    ? dailyPcf10yTable.items
+      .map((row) => getFieldValue<number | null>(row, dailyPcfFields, pcfFieldName))
+      .map((v) => normalizeNumber(v, 0))
+      .filter((v) => v > 0)
+    : []
   const pcfCurrent = pcfHistory.length ? pcfHistory[0] : current.pcf
   const pcf = pcfCurrent > 0 ? pcfCurrent : current.pcf
 
-  const pcfPercentile5yDerived = percentileRank(pcfCurrent, pcfHistory5y)
   const pcfPercentile10yDerived = percentileRank(pcfCurrent, pcfHistory)
-  const pcfPercentile5y = pcfPercentile5yDerived > 0 ? pcfPercentile5yDerived : current.pcfPercentile5y
   const pcfPercentile10y = pcfPercentile10yDerived > 0 ? pcfPercentile10yDerived : current.pcfPercentile10y
 
   const peAvg6mDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pe_ttm', 183, 0)
   const peAvg1yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pe_ttm', 365, 0)
   const peAvg3yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pe_ttm', 365 * 3, 0)
+  const peAvg5yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pe_ttm', 365 * 5, 0)
+  const peAvg10yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pe_ttm', 365 * 10, 0)
   const pbAvg6mDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pb', 183, 0)
   const pbAvg1yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pb', 365, 0)
   const pbAvg3yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pb', 365 * 3, 0)
-  const pcfAvg6mDerived = averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, 'pcf_ncf_ttm', 183, 0)
-  const pcfAvg1yDerived = averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, 'pcf_ncf_ttm', 365, 0)
-  const pcfAvg3yDerived = averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, 'pcf_ncf_ttm', 365 * 3, 0)
+  const pbAvg5yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pb', 365 * 5, 0)
+  const pbAvg10yDerived = averageInRecentDays(dailyBasic10yTable.items, daily10yFields, 'pb', 365 * 10, 0)
+  const pcfAvg6mDerived = pcfFieldName ? averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, pcfFieldName, 183, 0) : 0
+  const pcfAvg1yDerived = pcfFieldName ? averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, pcfFieldName, 365, 0) : 0
+  const pcfAvg3yDerived = pcfFieldName ? averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, pcfFieldName, 365 * 3, 0) : 0
+  const pcfAvg5yDerived = pcfFieldName ? averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, pcfFieldName, 365 * 5, 0) : 0
+  const pcfAvg10yDerived = pcfFieldName ? averageInRecentDays(dailyPcf10yTable.items, dailyPcfFields, pcfFieldName, 365 * 10, 0) : 0
 
   const peAvg6m = peAvg6mDerived > 0 ? peAvg6mDerived : current.peAvg6m
   const peAvg1y = peAvg1yDerived > 0 ? peAvg1yDerived : current.peAvg1y
   const peAvg3y = peAvg3yDerived > 0 ? peAvg3yDerived : current.peAvg3y
+  const peAvg5y = peAvg5yDerived > 0 ? peAvg5yDerived : current.peAvg5y
+  const peAvg10y = peAvg10yDerived > 0 ? peAvg10yDerived : current.peAvg10y
   const pbAvg6m = pbAvg6mDerived > 0 ? pbAvg6mDerived : current.pbAvg6m
   const pbAvg1y = pbAvg1yDerived > 0 ? pbAvg1yDerived : current.pbAvg1y
   const pbAvg3y = pbAvg3yDerived > 0 ? pbAvg3yDerived : current.pbAvg3y
+  const pbAvg5y = pbAvg5yDerived > 0 ? pbAvg5yDerived : current.pbAvg5y
+  const pbAvg10y = pbAvg10yDerived > 0 ? pbAvg10yDerived : current.pbAvg10y
   const pcfAvg6m = pcfAvg6mDerived > 0 ? pcfAvg6mDerived : current.pcfAvg6m
   const pcfAvg1y = pcfAvg1yDerived > 0 ? pcfAvg1yDerived : current.pcfAvg1y
   const pcfAvg3y = pcfAvg3yDerived > 0 ? pcfAvg3yDerived : current.pcfAvg3y
+  const pcfAvg5y = pcfAvg5yDerived > 0 ? pcfAvg5yDerived : current.pcfAvg5y
+  const pcfAvg10y = pcfAvg10yDerived > 0 ? pcfAvg10yDerived : current.pcfAvg10y
 
-  if (current.pePercentile5y === 0 && pePercentile5y > 0) fieldSources.pePercentile5y = 'derived'
-  if (current.pbPercentile5y === 0 && pbPercentile5y > 0) fieldSources.pbPercentile5y = 'derived'
-  if (current.pcfPercentile5y === 0 && pcfPercentile5y > 0) fieldSources.pcfPercentile5y = 'derived'
   if (current.pePercentile10y === 0 && pePercentile10y > 0) fieldSources.pePercentile10y = 'derived'
   if (current.pbPercentile10y === 0 && pbPercentile10y > 0) fieldSources.pbPercentile10y = 'derived'
   if (current.pcfPercentile10y === 0 && pcfPercentile10y > 0) fieldSources.pcfPercentile10y = 'derived'
   if (current.peAvg6m === 0 && peAvg6m > 0) fieldSources.peAvg6m = 'derived'
   if (current.peAvg1y === 0 && peAvg1y > 0) fieldSources.peAvg1y = 'derived'
   if (current.peAvg3y === 0 && peAvg3y > 0) fieldSources.peAvg3y = 'derived'
+  if (current.peAvg5y === 0 && peAvg5y > 0) fieldSources.peAvg5y = 'derived'
+  if (current.peAvg10y === 0 && peAvg10y > 0) fieldSources.peAvg10y = 'derived'
   if (current.pbAvg6m === 0 && pbAvg6m > 0) fieldSources.pbAvg6m = 'derived'
   if (current.pbAvg1y === 0 && pbAvg1y > 0) fieldSources.pbAvg1y = 'derived'
   if (current.pbAvg3y === 0 && pbAvg3y > 0) fieldSources.pbAvg3y = 'derived'
+  if (current.pbAvg5y === 0 && pbAvg5y > 0) fieldSources.pbAvg5y = 'derived'
+  if (current.pbAvg10y === 0 && pbAvg10y > 0) fieldSources.pbAvg10y = 'derived'
   if (current.pcfAvg6m === 0 && pcfAvg6m > 0) fieldSources.pcfAvg6m = 'derived'
   if (current.pcfAvg1y === 0 && pcfAvg1y > 0) fieldSources.pcfAvg1y = 'derived'
   if (current.pcfAvg3y === 0 && pcfAvg3y > 0) fieldSources.pcfAvg3y = 'derived'
+  if (current.pcfAvg5y === 0 && pcfAvg5y > 0) fieldSources.pcfAvg5y = 'derived'
+  if (current.pcfAvg10y === 0 && pcfAvg10y > 0) fieldSources.pcfAvg10y = 'derived'
   if (current.pcf === 0 && pcf > 0) fieldSources.pcf = 'auto'
 
   return {
@@ -218,20 +236,23 @@ export function deriveMarketData(args: {
     totalShareWan,
     sharesYi,
     pcf,
-    pePercentile5y,
-    pbPercentile5y,
-    pcfPercentile5y,
     pePercentile10y,
     pbPercentile10y,
     pcfPercentile10y,
     peAvg6m,
     peAvg1y,
     peAvg3y,
+    peAvg5y,
+    peAvg10y,
     pbAvg6m,
     pbAvg1y,
     pbAvg3y,
+    pbAvg5y,
+    pbAvg10y,
     pcfAvg6m,
     pcfAvg1y,
     pcfAvg3y,
+    pcfAvg5y,
+    pcfAvg10y,
   }
 }

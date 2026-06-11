@@ -31,6 +31,39 @@ type AnalyzerViewProps = {
   onSaveSnapshot: () => void
 }
 
+type AverageTermKey = 'avg6m' | 'avg1y' | 'avg3y' | 'avg5y' | 'avg10y'
+type AverageTermDef = { key: AverageTermKey; years: number; cls: string; label: string }
+
+const BASE_AVERAGE_TERMS: Array<Omit<AverageTermDef, 'label'>> = [
+  { key: 'avg6m', years: 0.5, cls: 'is-6m' },
+  { key: 'avg1y', years: 1, cls: 'is-1y' },
+  { key: 'avg3y', years: 3, cls: 'is-3y' },
+  { key: 'avg5y', years: 5, cls: 'is-5y' },
+  { key: 'avg10y', years: 10, cls: 'is-10y' },
+]
+
+function formatHorizonLabel(years: number): string {
+  if (!(years > 0)) return '10Y'
+  if (years < 1) {
+    const months = Math.max(1, Math.round(years * 12))
+    return `${months}M`
+  }
+  return `${Math.max(1, Math.round(years))}Y`
+}
+
+function buildAdaptiveAverageTerms(listedYears: number): AverageTermDef[] {
+  const maxYears = listedYears > 0 ? Math.min(10, listedYears) : 10
+  const deduped = new Map<string, AverageTermDef>()
+  for (const term of BASE_AVERAGE_TERMS) {
+    const effectiveYears = Math.min(term.years, maxYears)
+    const label = formatHorizonLabel(effectiveYears)
+    if (!deduped.has(label)) {
+      deduped.set(label, { ...term, label })
+    }
+  }
+  return Array.from(deduped.values())
+}
+
 function Section({
   title,
   children,
@@ -92,6 +125,12 @@ export function AnalyzerView(props: AnalyzerViewProps) {
 
   const capeNote = fn.cape || ''
   const capeMethod = capeMethodFor(props.form, fs, fn)
+  const adaptiveAverageTerms = useMemo(() => buildAdaptiveAverageTerms(props.form.listedYears), [props.form.listedYears])
+  const historyWindowLabel = useMemo(() => {
+    const maxYears = props.form.listedYears > 0 ? Math.min(10, props.form.listedYears) : 10
+    return formatHorizonLabel(maxYears)
+  }, [props.form.listedYears])
+  const showHistoryCharts = Boolean(props.currentSourceTradeDate)
 
   const modelMap = useMemo(() => {
     const lookup: Partial<Record<ModelResult['key'], ModelResult>> = {}
@@ -257,57 +296,91 @@ export function AnalyzerView(props: AnalyzerViewProps) {
           ) : null}
 
           {activeTab === 'relative' ? (
-            <div className="system-grid">
-              <div>
-                <h3>相对估值输入参数（PE/PB/PCF/PEG）</h3>
-                <div className="form-grid">
-                  <NumberField label="每股收益 EPS（元）" name="eps" value={props.form.eps} emptyIfZero source={fs.eps} helperText={helperFor('eps')} helperFormula={formulaFor('eps')} onChange={props.onUpdateField} />
-                  <NumberField label="每股净资产 BVPS（元）" name="bvps" value={props.form.bvps} emptyIfZero source={fs.bvps} helperText={helperFor('bvps')} helperFormula={formulaFor('bvps')} onChange={props.onUpdateField} />
-                  <NumberField label="行业中位 PE" name="industryPE" value={props.form.industryPE} emptyIfZero source={fs.industryPE} helperText={helperFor('industryPE')} helperFormula={formulaFor('industryPE')} onChange={props.onUpdateField} />
-                  <NumberField label="行业中位 PB" name="industryPB" value={props.form.industryPB} emptyIfZero source={fs.industryPB} helperText={helperFor('industryPB')} helperFormula={formulaFor('industryPB')} onChange={props.onUpdateField} />
-                  <NumberField label="当前 PCF（TTM）" name="pcf" value={props.form.pcf} emptyIfZero source={fs.pcf} helperText={helperFor('pcf')} helperFormula={formulaFor('pcf')} onChange={props.onUpdateField} />
-                  <NumberField label="PEG" name="peg" step={0.01} value={props.form.peg} emptyIfZero source={fs.peg} helperText={helperFor('peg')} helperFormula={formulaFor('peg')} onChange={props.onUpdateField} />
+            <>
+              <div className="system-grid">
+                <div>
+                  <h3>相对估值输入参数（PE/PB/PCF/PEG）</h3>
+                  <div className="form-grid">
+                    <NumberField label="每股收益 EPS（元）" name="eps" value={props.form.eps} emptyIfZero source={fs.eps} helperText={helperFor('eps')} helperFormula={formulaFor('eps')} onChange={props.onUpdateField} />
+                    <NumberField label="每股净资产 BVPS（元）" name="bvps" value={props.form.bvps} emptyIfZero source={fs.bvps} helperText={helperFor('bvps')} helperFormula={formulaFor('bvps')} onChange={props.onUpdateField} />
+                    <NumberField label="行业中位 PE" name="industryPE" value={props.form.industryPE} emptyIfZero source={fs.industryPE} helperText={helperFor('industryPE')} helperFormula={formulaFor('industryPE')} onChange={props.onUpdateField} />
+                    <NumberField label="行业中位 PB" name="industryPB" value={props.form.industryPB} emptyIfZero source={fs.industryPB} helperText={helperFor('industryPB')} helperFormula={formulaFor('industryPB')} onChange={props.onUpdateField} />
+                    <NumberField label="当前 PCF（TTM）" name="pcf" value={props.form.pcf} emptyIfZero source={fs.pcf} helperText={helperFor('pcf')} helperFormula={formulaFor('pcf')} onChange={props.onUpdateField} />
+                    <NumberField label="PEG" name="peg" step={0.01} value={props.form.peg} emptyIfZero source={fs.peg} helperText={helperFor('peg')} helperFormula={formulaFor('peg')} onChange={props.onUpdateField} />
+                  </div>
+                </div>
+                <div>
+                  <ModelBox model={relModel} />
+                  {showHistoryCharts && props.result.percentileCloud?.length ? (
+                    <div className="pct-gauge-card">
+                      <div className="pct-gauge-head">
+                        <h3>历史分位（{historyWindowLabel}）</h3>
+                      </div>
+                      <div className="pct-gauge-list">
+                        {props.result.percentileCloud.map((p) => {
+                          const pct = Math.max(0, Math.min(100, p.percentile10y))
+                          const colorCls = pct < 30 ? 'is-cheap' : pct < 70 ? 'is-mid' : 'is-exp'
+                          return (
+                            <div key={p.metric} className="pct-gauge-row">
+                              <div className="pct-gauge-label">{p.metric}</div>
+                              <div className="pct-gauge-track">
+                                <div className="pct-gauge-zone" />
+                                <div className={`pct-gauge-thumb ${colorCls}`} style={{ left: `calc(${pct}% - 6px)` }} />
+                              </div>
+                              <div className={`pct-gauge-value ${colorCls}`}>{pct === 0 ? 'N/A' : `${pct.toFixed(1)}%`}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="pct-gauge-legend">
+                        <span className="pct-gauge-legend-item is-cheap">低位 &lt;30%</span>
+                        <span className="pct-gauge-legend-item is-mid">中位 30-70%</span>
+                        <span className="pct-gauge-legend-item is-exp">高位 &gt;70%</span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
-              <div>
-                <ModelBox model={relModel} />
-                {props.result.valuationAverages?.length ? (
-                  <div className="valuation-avg-card">
-                    <div className="valuation-avg-head">
-                      <h3>估值均值柱状图</h3>
-                      <span className="valuation-avg-subhead">6M / 1Y / 3Y</span>
-                    </div>
-                    <div className="valuation-avg-list">
-                      {props.result.valuationAverages.map((point) => {
-                        const metricMax = Math.max(point.avg6m, point.avg1y, point.avg3y, 1)
-                        const bars = [
-                          { label: '6M', value: point.avg6m, cls: 'is-6m' },
-                          { label: '1Y', value: point.avg1y, cls: 'is-1y' },
-                          { label: '3Y', value: point.avg3y, cls: 'is-3y' },
-                        ]
-
-                        return (
-                          <div key={point.metric} className="valuation-avg-metric">
-                            <div className="valuation-avg-metric-label">{point.metric}</div>
-                            <div className="valuation-avg-bars">
-                              {bars.map((bar) => (
-                                <div key={bar.label} className="valuation-avg-row">
-                                  <div className="valuation-avg-term">{bar.label}</div>
-                                  <div className="valuation-avg-track">
-                                    <div className={`valuation-avg-fill ${bar.cls}`} style={{ width: `${(bar.value / metricMax) * 100}%` }} />
-                                  </div>
-                                  <div className="valuation-avg-value">{formatMaybeNumber(bar.value, 2)}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+              {showHistoryCharts && props.result.valuationAverages?.length ? (
+                <div className="valuation-avg-card valuation-avg-card--full">
+                  <div className="valuation-avg-head">
+                    <h3>估值均值柱状图</h3>
+                    <span className="valuation-avg-subhead">{adaptiveAverageTerms.map((term) => term.label).join(' / ')}</span>
                   </div>
-                ) : null}
-              </div>
-            </div>
+                  <div className="valuation-avg-list">
+                    {props.result.valuationAverages.map((point) => {
+                      const bars = adaptiveAverageTerms.map((term) => ({
+                        label: term.label,
+                        value: point[term.key],
+                        cls: term.cls,
+                      }))
+                      const metricMax = Math.max(...bars.map((bar) => bar.value), 1)
+
+                      return (
+                        <div key={point.metric} className="valuation-avg-metric">
+                          <div className="valuation-avg-metric-label">{point.metric}</div>
+                          <div className="valuation-avg-columns">
+                            {bars.map((bar) => {
+                              const hasValue = bar.value > 0
+                              const normalizedHeight = hasValue ? (bar.value / metricMax) * 100 : 0
+                              return (
+                                <div key={bar.label} className="valuation-avg-column">
+                                  <div className="valuation-avg-value">{formatMaybeNumber(bar.value, 2)}</div>
+                                  <div className="valuation-avg-column-track">
+                                    <div className={`valuation-avg-column-fill ${bar.cls}`} style={{ height: `${normalizedHeight}%` }} />
+                                  </div>
+                                  <div className="valuation-avg-term">{bar.label}</div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : null}
 
           {activeTab === 'cashflow' ? (
