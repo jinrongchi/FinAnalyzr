@@ -32,4 +32,6 @@ export const syncApi = {
   stockBasic: () => http.post('/sync/stock-basic'),
   stock: (tsCode) => http.post(`/sync/stock/${tsCode}`),
   macro: () => http.post('/sync/macro'),
+  statusAll: () => http.get('/sync/status'),
+  statusOne: (taskName) => http.get(`/sync/status/${taskName}`),
 }

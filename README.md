@@ -29,9 +29,6 @@ TUSHARE_TOKEN=your_token_here
 
 ### 3. 安装后端依赖 & 初始化数据库
 ```powershell
-pip install -r requirements.txt
-alembic upgrade head
-
 py -3.12 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
@@ -50,8 +47,6 @@ py -3.12 -m venv .venv
 
 ### 4. 启动后端
 ```powershell
-uvicorn ap.main:app --reload --port8000
-
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 API 文档: http://localhost:8000/docs
@@ -81,7 +76,7 @@ GET http://localhost:8000/health
 ```
 POST http://localhost:8000/api/v1/sync/stock-basic
 ```
-或通过前端：打开 http://localhost:5173 → 点击「同步」按钮 → 「股票基础数据」
+或通过前端：打开 http://localhost:5173/scan → 点击「同步股票基础数据」
 
 **预计耗时**：5-10分钟（≈5500只股票）
 
@@ -90,6 +85,7 @@ POST http://localhost:8000/api/v1/sync/stock-basic
 POST http://localhost:8000/api/v1/sync/macro
 ```
 同步中国10年期国债收益率、CPI、沪深300指数数据。
+也可在扫描页点击「同步宏观数据」，并观察“同步任务状态”面板。
 
 **预计耗时**：1-2分钟
 

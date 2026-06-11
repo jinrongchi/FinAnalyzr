@@ -5,6 +5,31 @@
       <span class="muted" style="font-size:13px;">基于最新估值快照排序</span>
     </div>
 
+    <div class="card" style="padding:12px 16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
+      <button class="btn-primary" @click="triggerStockBasic" :disabled="syncBusy">
+        {{ syncBusy ? '任务处理中…' : '同步股票基础数据' }}
+      </button>
+      <button class="btn-ghost" @click="triggerMacro" :disabled="syncBusy">同步宏观数据</button>
+      <button class="btn-ghost" @click="refreshSyncStatus">刷新状态</button>
+      <span class="muted" style="font-size:12px;">状态每3秒自动刷新</span>
+    </div>
+
+    <div class="card" style="padding:12px 16px; margin-bottom:14px;">
+      <div style="font-size:13px; font-weight:600; margin-bottom:8px;">同步任务状态</div>
+      <div style="display:grid; grid-template-columns: 180px 120px 1fr; gap:8px; font-size:12px;">
+        <template v-for="task in ['sync_stock_basic', 'sync_macro']" :key="task">
+          <div class="mono">{{ task }}</div>
+          <div :class="stateClass(syncStatus[task]?.state)">{{ syncStatus[task]?.state || 'idle' }}</div>
+          <div class="muted">
+            <span v-if="syncStatus[task]?.error">错误: {{ syncStatus[task].error }}</span>
+            <span v-else-if="syncStatus[task]?.finished_at">完成: {{ formatTime(syncStatus[task].finished_at) }}</span>
+            <span v-else-if="syncStatus[task]?.started_at">开始: {{ formatTime(syncStatus[task].started_at) }}</span>
+            <span v-else>尚未触发</span>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- Filters -->
     <div class="card" style="padding:12px 16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
       <select v-model="filters.industry_group" @change="load">
@@ -63,14 +88,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { scanApi } from '@/api'
+import { scanApi, syncApi } from '@/api'
 
 const router = useRouter()
 const loading = ref(false)
 const stocks = ref([])
 const filters = reactive({ industry_group: '', min_score: 0, max_score: 100, exclude_st: true })
+const syncStatus = ref({})
+let syncTimer = null
+
+const syncBusy = computed(() => {
+  const stockState = syncStatus.value?.sync_stock_basic?.state
+  const macroState = syncStatus.value?.sync_macro?.state
+  return stockState === 'running' || macroState === 'running'
+})
 
 const INDUSTRY_LABELS = {
   consumer_pharma: '消费&医药', financial_re: '金融&地产',
@@ -79,6 +112,33 @@ const INDUSTRY_LABELS = {
 }
 const REC_LABELS = { do_not_invest: '拒绝', watch: '观察', fairly_valued: '合理', attractive: '吸引', very_attractive: '强烈推荐' }
 const scoreClass = (s) => s >= 65 ? 'text-green' : s >= 40 ? 'text-yellow' : 'text-red'
+
+function stateClass(state) {
+  if (state === 'running') return 'text-yellow'
+  if (state === 'success') return 'text-green'
+  if (state === 'failed') return 'text-red'
+  return 'muted'
+}
+
+function formatTime(v) {
+  if (!v) return '--'
+  return new Date(v).toLocaleString()
+}
+
+async function refreshSyncStatus() {
+  const res = await syncApi.statusAll()
+  syncStatus.value = res.data || {}
+}
+
+async function triggerStockBasic() {
+  await syncApi.stockBasic()
+  await refreshSyncStatus()
+}
+
+async function triggerMacro() {
+  await syncApi.macro()
+  await refreshSyncStatus()
+}
 
 async function load() {
   loading.value = true
@@ -99,5 +159,13 @@ async function load() {
 }
 
 function goAnalyze(tsCode) { router.push(`/analyzer/${tsCode}`) }
-onMounted(load)
+onMounted(async () => {
+  await load()
+  await refreshSyncStatus()
+  syncTimer = setInterval(refreshSyncStatus, 3000)
+})
+
+onUnmounted(() => {
+  if (syncTimer) clearInterval(syncTimer)
+})
 </script>
